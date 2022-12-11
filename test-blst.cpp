@@ -1,7 +1,7 @@
 #include <bits/stdc++.h>
 #include "blst.h"
-//#include "gmpxx.h"
-#include "gmp.h"
+#include "gmpxx.h"
+// #include "gmp.h"
 
 using namespace std;
 
@@ -36,4 +36,7 @@ int main() {
     mpz_clear(ssquare);
     mpz_clear(smod);
     mpz_clear(g);
+    mpz_class svn(g);
+    cout << svn << endl;
+    cout << svn - 5 << endl;
 }
