@@ -1,10 +1,14 @@
-#include <bits/stdc++.h>
+#include <string>
+#include <vector>
+#include <iostream>
+#include <map>
+
 extern "C" {
-  #include "blst.h"
+  //#include "blst.h"
   #include "c_kzg.h"
   #include "bls12_381.h"
 }
-using namespace std;
+//using namespace std;
 
 // Constants
 
@@ -18,9 +22,10 @@ struct VerkleNode {
   bool is_leaf = false;
   // Dummy commitment. Will be updated eventually.
   g1_t commitment = g1_generator;
-  string key = "";
-  string value = "";
-  map<int, VerkleNode> childs;
+  std::string key = "";
+  std::string value = "";
+  std::map<int, VerkleNode> childs;
+  uint64_t hash = 0;
 };
 
 class VerkleTree {
@@ -39,8 +44,8 @@ class VerkleTree {
   void setRoot(VerkleNode& r) {
     root_ = r;
   }
-  vector<int> get_key_path(const string& key);
-  void plain_insert_verkle_node(const string& key, const string value);
+  std::vector<int> get_key_path(const std::string& key);
+  void plain_insert_verkle_node(const std::string& key, const std::string value);
   void compute_commitments();
   private:
   VerkleNode root_;

@@ -1,12 +1,13 @@
 #include "verkle.h"
+#include "blst.hpp"
 
-using namespace std;
+//using namespace std;
 
-vector<int> VerkleTree::get_key_path(const string& key) {
+std::vector<int> VerkleTree::get_key_path(const std::string& key) {
     // TODO(pranav): Remove this assertion later.
     assert(WIDTH == 4);
-    vector<int> out;
-    string stripped = key;
+    std::vector<int> out;
+    std::string stripped = key;
     if (key.length() == 64 + 2) { // key = 0x34fd....
         stripped = key.substr(2);
     }
@@ -23,14 +24,14 @@ vector<int> VerkleTree::get_key_path(const string& key) {
     return out;
 }
 
-void VerkleTree::plain_insert_verkle_node(const string& key,
- const string value) {
+void VerkleTree::plain_insert_verkle_node(const std::string& key,
+ const std::string value) {
     // starting from root, iterate downwards and add the corresponding node.
     VerkleNode* cur = &root_;
     VerkleNode* prev = cur;
     // keep moving to children till you encounter a node that is not leaf.
     // or we may exit early as well.
-    vector<int> ids = get_key_path(key);
+    std::vector<int> ids = get_key_path(key);
     int ptr = 0;
     int idx = 0;
     while (cur->is_leaf == false && ptr < ids.size()) {
@@ -57,8 +58,8 @@ void VerkleTree::plain_insert_verkle_node(const string& key,
     // Child must be present if we reach here.
     // and the node must be expanded.
     assert(prev->childs.find(idx) != prev->childs.end());
-    string cur_key = prev->childs[idx].key;
-    string cur_val = prev->childs[idx].value;
+    std::string cur_key = prev->childs[idx].key;
+    std::string cur_val = prev->childs[idx].value;
     VerkleNode nwnode;
     // Delete existing leaf.
     cur->childs[idx] = nwnode;
@@ -68,8 +69,37 @@ void VerkleTree::plain_insert_verkle_node(const string& key,
     plain_insert_verkle_node(cur_key, cur_val);
 }
 
+// Naive byte hashing function.
+// hashes 48 bytes to a uint64_t
+uint64_t hash_bytes(const uint8_t b[48]) {
+    uint64_t op = 0;
+    auto hasher = std::hash<uint8_t>();
+    for (int i = 0; i < 48; ++i) {
+        op += hasher(b[i]);
+    }
+    return op;
+}
+
 void dfs_commitment(VerkleNode& x) {
-    
+    if (x.is_leaf) {
+        auto hasher = std::hash<std::string>();
+        uint64_t hashv = hasher(x.key);
+        hashv += hasher(x.value);
+        x.hash = hashv;
+        return;
+    }
+    std::vector<uint64_t> child_hashes(WIDTH, 0);
+    for (int i = 0; i < WIDTH; ++i) {
+        if (x.childs.find(i) != x.childs.end()) {
+            dfs_commitment(x.childs[i]);
+            child_hashes[i] = x.childs[i].hash;
+        }
+    }
+    // TODO(pranav): change this to actual commitment calculation.
+    x.commitment = g1_generator;
+    uint8_t com_bytes[48];
+    //(&com_bytes, &x.commitment);
+    x.hash = hash_bytes(com_bytes);
 }
 
 void VerkleTree::compute_commitments() {
@@ -78,6 +108,6 @@ void VerkleTree::compute_commitments() {
 }
 
 int main() {
-    cout << "Dummy main function!";
+    std::cout << "Dummy main function!";
     return 0;
 }
