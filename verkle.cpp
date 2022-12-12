@@ -82,12 +82,22 @@ uint64_t hash_commitment(g1_t* comm) {
     return op;
 }
 
-void dfs_commitment(VerkleNode& x) {
+void VerkleTree::poly_commitment(g1_t* out, const vector<uint64_t>& vals) {
+    fr_t valfr[WIDTH + 1];
+    for (int i = 0; i < WIDTH; ++i) {
+        fr_from_uint64(&valfr[i], vals[i]);
+    }
+    // apply pippenger
+    g1_linear_combination(out, s1_lagrange, valfr, WIDTH);
+}
+
+void VerkleTree::dfs_commitment(VerkleNode& x) {
     if (x.is_leaf) {
         auto hasher = std::hash<std::string>();
         uint64_t hashv = hasher(x.key);
         hashv += hasher(x.value);
         x.hash = hashv;
+        // No need to calculate commitment.
         return;
     }
     std::vector<uint64_t> child_hashes(WIDTH, 0);
@@ -97,10 +107,7 @@ void dfs_commitment(VerkleNode& x) {
             child_hashes[i] = x.childs[i].hash;
         }
     }
-    // TODO(pranav): change this to actual commitment calculation.
-    x.commitment = g1_generator;
-    uint8_t com_bytes[48];
-    //(&com_bytes, &x.commitment);
+    poly_commitment(&x.commitment, child_hashes);
     x.hash = hash_commitment(&x.commitment);
 }
 
