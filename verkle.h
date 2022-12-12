@@ -1,14 +1,11 @@
-#include <string>
-#include <vector>
-#include <iostream>
-#include <map>
+#include <bits/stdc++.h>
 
 extern "C" {
   //#include "blst.h"
   #include "c_kzg.h"
   #include "bls12_381.h"
 }
-//using namespace std;
+using namespace std;
 
 // Constants
 

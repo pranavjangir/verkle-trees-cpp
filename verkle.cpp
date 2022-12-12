@@ -1,7 +1,7 @@
 #include "verkle.h"
 #include "blst.hpp"
 
-//using namespace std;
+using namespace std;
 
 std::vector<int> VerkleTree::get_key_path(const std::string& key) {
     // TODO(pranav): Remove this assertion later.
@@ -71,11 +71,13 @@ void VerkleTree::plain_insert_verkle_node(const std::string& key,
 
 // Naive byte hashing function.
 // hashes 48 bytes to a uint64_t
-uint64_t hash_bytes(const uint8_t b[48]) {
+uint64_t hash_commitment(g1_t* comm) {
     uint64_t op = 0;
-    auto hasher = std::hash<uint8_t>();
-    for (int i = 0; i < 48; ++i) {
-        op += hasher(b[i]);
+    auto hasher = std::hash<uint64_t>();
+    for (int i = 0; i < 384/8/sizeof(limb_t); ++i) {
+        op += hasher(comm->x.l[i]);
+        op += hasher(comm->y.l[i]);
+        op += hasher(comm->z.l[i]);
     }
     return op;
 }
@@ -99,7 +101,7 @@ void dfs_commitment(VerkleNode& x) {
     x.commitment = g1_generator;
     uint8_t com_bytes[48];
     //(&com_bytes, &x.commitment);
-    x.hash = hash_bytes(com_bytes);
+    x.hash = hash_commitment(&x.commitment);
 }
 
 void VerkleTree::compute_commitments() {
