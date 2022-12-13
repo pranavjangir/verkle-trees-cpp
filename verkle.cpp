@@ -119,6 +119,38 @@ void VerkleTree::compute_commitments() {
     dfs_commitment(root_);
 }
 
+std::vector< pair<VerkleNode, int> > VerkleTree::get_path(const string& key) {
+    // start from root and get the path.
+
+    vector< pair<VerkleNode, int> > out;
+    auto curnode = root_;
+    auto idx = get_key_path(key);
+    int ptr = 0;
+    while(curnode.is_leaf == false) {
+        int nxt = idx[ptr];
+        ptr++;
+        out.push_back(make_pair(curnode, nxt));
+        curnode = curnode.childs[nxt];
+    }
+    if (!curnode.is_leaf) {
+        cout << "get_path::End node is not leaf." << endl;
+        assert(false);
+    }
+    if (curnode.key != key) {
+        // It is expected that there will be some path.
+        cout << "get_path::No path found." << endl;
+        assert(false);
+    }
+    return out;
+}
+
+// VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
+
+//     for (auto& key : keys) {
+
+//     }
+// }
+
 int main() {
     std::cout << "Dummy main function!\n";
     VerkleTree vt;

@@ -31,6 +31,12 @@ struct VerkleNode {
   uint64_t hash = 0;
 };
 
+struct VerkleProof {
+  vector<g1_t> commitments;
+  g1_t D;
+  g1_t proof;
+};
+
 class VerkleTree {
   public:
   VerkleTree() {
@@ -72,6 +78,8 @@ class VerkleTree {
   void compute_commitments();
   void dfs_commitment(VerkleNode& x);
   void poly_commitment(g1_t* out, const vector<uint64_t>& vals);
+  std::vector< pair<VerkleNode, int> > get_path(const string& key);
+  VerkleProof get_verkle_multiproof(const vector<string>& keys);
   private:
   VerkleNode root_;
   FFTSettings ffts_;
