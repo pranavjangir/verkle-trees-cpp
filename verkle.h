@@ -60,6 +60,15 @@ class VerkleTree {
 
     // compute lagrange coeff
     fft_g1(s1_lagrange, s1, /*inverse = */true, WIDTH, &ffts_);
+
+    // calc ters 1 / (1 - omega^i) where omega = root of unity.
+    fr_from_uint64(&inv[0], 0);
+    for (int i = 1 ; i < WIDTH; ++i) {
+      fr_t tmp;
+      fr_from_uint64(&tmp, 1);
+      fr_sub(&tmp, &tmp, (ffts_.expanded_roots_of_unity + i));
+      fr_inv(&inv[i], &tmp);
+    }
   }
   ~VerkleTree() {
     cout << "Destructor called. This is important\n";
@@ -88,5 +97,6 @@ class VerkleTree {
   g1_t s1[WIDTH + 1]; // Consider giving extra space.
   g2_t s2[WIDTH + 1];
   g1_t s1_lagrange[WIDTH + 1];
+  fr_t inv[WIDTH + 1];
 };
 
