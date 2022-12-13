@@ -78,7 +78,8 @@ class VerkleTree {
   void compute_commitments();
   void dfs_commitment(VerkleNode& x);
   void poly_commitment(g1_t* out, const vector<uint64_t>& vals);
-  std::vector< pair<VerkleNode, int> > get_path(const string& key);
+  std::vector< pair<vector<int>, pair<VerkleNode, int>> >
+       get_path(const string& key);
   VerkleProof get_verkle_multiproof(const vector<string>& keys);
   private:
   VerkleNode root_;

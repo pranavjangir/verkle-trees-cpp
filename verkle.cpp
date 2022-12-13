@@ -119,18 +119,22 @@ void VerkleTree::compute_commitments() {
     dfs_commitment(root_);
 }
 
-std::vector< pair<VerkleNode, int> > VerkleTree::get_path(const string& key) {
+std::vector< pair<vector<int>, pair<VerkleNode, int>> > 
+    VerkleTree::get_path(const string& key) {
     // start from root and get the path.
 
-    vector< pair<VerkleNode, int> > out;
+    vector< pair<vector<int>, pair<VerkleNode, int>> > out;
     auto curnode = root_;
     auto idx = get_key_path(key);
     int ptr = 0;
+    vector<int> path_so_far;
+    path_so_far.push_back(-1);
     while(curnode.is_leaf == false) {
         int nxt = idx[ptr];
         ptr++;
-        out.push_back(make_pair(curnode, nxt));
+        out.push_back(make_pair(path_so_far, make_pair(curnode, nxt)));
         curnode = curnode.childs[nxt];
+        path_so_far.push_back(nxt);
     }
     if (!curnode.is_leaf) {
         cout << "get_path::End node is not leaf." << endl;
@@ -144,12 +148,31 @@ std::vector< pair<VerkleNode, int> > VerkleTree::get_path(const string& key) {
     return out;
 }
 
-// VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
+VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
 
-//     for (auto& key : keys) {
-
-//     }
-// }
+    map<vector<int>, pair<VerkleNode, set<int> > > required_proofs;
+    for (auto& key : keys) {
+        auto node_path = get_path(key);
+        // update the main database.
+        for (auto& ni : node_path) {
+            // add indexes to the node.
+            if (required_proofs.find(ni.first) == required_proofs.end()) {
+                set<int> tmp;
+                tmp.insert(ni.second.second);
+                required_proofs[ni.first] = 
+                    (make_pair(ni.second.first, tmp));
+            } else {
+                auto& val = required_proofs[ni.first];
+                val.second.insert(ni.second.second);
+            }
+        }
+    }
+    VerkleProof out;
+    // Construct the commitments to send and the proofs.
+    // proofs are to be sent based on the indexes required per commitment.
+    
+    return out;
+}
 
 int main() {
     std::cout << "Dummy main function!\n";
