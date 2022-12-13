@@ -5,7 +5,7 @@ using namespace std;
 
 std::vector<int> VerkleTree::get_key_path(const std::string& key) {
     // TODO(pranav): Remove this assertion later.
-    assert(WIDTH == 4);
+    assert(WIDTH_BITS == 4);
     std::vector<int> out;
     std::string stripped = key;
     if (key.length() == 64 + 2) { // key = 0x34fd....
@@ -70,7 +70,8 @@ void VerkleTree::plain_insert_verkle_node(const std::string& key,
 }
 
 // Naive byte hashing function.
-// hashes 48 bytes to a uint64_t
+// hashes 384 bits to a uint64_t
+// TODO(pranav): NOT A GOOD HASH FUNCTION.
 uint64_t hash_commitment(g1_t* comm) {
     uint64_t op = 0;
     auto hasher = std::hash<uint64_t>();
@@ -97,6 +98,7 @@ void VerkleTree::dfs_commitment(VerkleNode& x) {
         uint64_t hashv = hasher(x.key);
         hashv += hasher(x.value);
         x.hash = hashv;
+        cerr << "leaf hash : " << x.hash << endl;
         // No need to calculate commitment.
         return;
     }
@@ -109,6 +111,7 @@ void VerkleTree::dfs_commitment(VerkleNode& x) {
     }
     poly_commitment(&x.commitment, child_hashes);
     x.hash = hash_commitment(&x.commitment);
+    cerr << "internal hash : " << x.hash << endl;
 }
 
 void VerkleTree::compute_commitments() {
@@ -117,6 +120,14 @@ void VerkleTree::compute_commitments() {
 }
 
 int main() {
-    std::cout << "Dummy main function!";
+    std::cout << "Dummy main function!\n";
+    VerkleTree vt;
+    string key = "0x";
+    string value = "abcdefg";
+    for (int i = 0; i < 64; ++i) {
+        key += 'a';
+    }
+    vt.plain_insert_verkle_node(key, value);
+    vt.compute_commitments();
     return 0;
 }

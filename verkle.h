@@ -56,6 +56,7 @@ class VerkleTree {
     fft_g1(s1_lagrange, s1, /*inverse = */true, WIDTH, &ffts_);
   }
   ~VerkleTree() {
+    cout << "Destructor called. This is important\n";
     free_fft_settings(&ffts_);
     free_kzg_settings(&kzgs_);
   }
