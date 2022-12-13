@@ -148,6 +148,35 @@ std::vector< pair<vector<int>, pair<VerkleNode, int>> >
     return out;
 }
 
+vector<fr_t> VerkleTree::in_domain_q(const vector<fr_t>& in, int idx) {
+    assert(in.size() == WIDTH);
+    assert(idx < in.size());
+
+    vector<fr_t> out(WIDTH);
+    for (int i = 0; i < WIDTH; ++i) {
+        fr_from_uint64(&out[i], 0);
+    }
+
+    fr_t y = in[idx];
+
+    for (int i = 0 ; i < WIDTH; ++i) {
+        if (i == idx) continue; // We cannot do a simple division in this case.
+        fr_sub(&out[i], &in[i], &y);
+        fr_mul(&out[i], &out[i], 
+                &ffts_.expanded_roots_of_unity[(WIDTH - i)%WIDTH]);
+        fr_mul(&out[i], &out[i], &inv[(WIDTH + idx - i)%WIDTH]);
+    }
+    // Now compute out[idx].
+    for (int i = 0; i < WIDTH; ++i) {
+        if (i == idx) continue;
+        fr_t tmp;
+        fr_mul(&tmp, &out[i], 
+                &ffts_.expanded_roots_of_unity[(i - idx + WIDTH)%WIDTH]);
+        fr_sub(&out[idx], &out[idx], &tmp);
+    }
+    return out;
+}
+
 VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
 
     map<vector<int>, pair<VerkleNode, set<int> > > required_proofs;
@@ -170,7 +199,7 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
     VerkleProof out;
     // Construct the commitments to send and the proofs.
     // proofs are to be sent based on the indexes required per commitment.
-    
+
     return out;
 }
 

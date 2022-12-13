@@ -90,7 +90,12 @@ class VerkleTree {
   std::vector< pair<vector<int>, pair<VerkleNode, int>> >
        get_path(const string& key);
   VerkleProof get_verkle_multiproof(const vector<string>& keys);
-  private:
+  // Computes (f(x) - f(idx)) / (x - w^idx)
+  // Where f(x) is the poly corresponding to `in`.
+  vector<fr_t> in_domain_q(const vector<fr_t>& in, int idx);
+  
+  
+private:
   VerkleNode root_;
   FFTSettings ffts_;
   KZGSettings kzgs_;
