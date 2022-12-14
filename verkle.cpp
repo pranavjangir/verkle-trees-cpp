@@ -3,6 +3,13 @@
 
 using namespace std;
 
+// Fiat shamir heuristic random values.
+// TODO(pranav): These should ideally be calculated 
+// using a suitable hash function.
+// For benchmarking purposes, we are keeping them constants.
+int rr = 22;
+int tt = 42;
+
 std::vector<int> VerkleTree::get_key_path(const std::string& key) {
     // TODO(pranav): Remove this assertion later.
     assert(WIDTH_BITS == 4);
@@ -87,6 +94,17 @@ void VerkleTree::poly_commitment(g1_t* out, const vector<uint64_t>& vals) {
     fr_t valfr[WIDTH + 1];
     for (int i = 0; i < WIDTH; ++i) {
         fr_from_uint64(&valfr[i], vals[i]);
+    }
+    // apply pippenger
+    g1_linear_combination(out, s1_lagrange, valfr, WIDTH);
+}
+
+// Same as above but different input parameters. 
+// I messed up while writing lol.
+void VerkleTree::poly_commitment_fr(g1_t* out, const vector<fr_t>& vals) {
+    fr_t valfr[WIDTH + 1];
+    for (int i = 0; i < WIDTH; ++i) {
+        valfr[i] = vals[i];
     }
     // apply pippenger
     g1_linear_combination(out, s1_lagrange, valfr, WIDTH);
@@ -177,6 +195,88 @@ vector<fr_t> VerkleTree::in_domain_q(const vector<fr_t>& in, int idx) {
     return out;
 }
 
+VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
+                                         set<int> > > nodes) {
+    VerkleProof out;
+    // Generate a list of <commitment, poly, single_index_to_proof>
+    // That is, flatten the `nodes` structure.
+    struct flat_node {
+        g1_t commitment;
+        vector<fr_t> p;
+        int idx;
+    };
+    vector< flat_node > X;
+    for (auto& nod : nodes) {
+        vector<fr_t> ptmp(WIDTH);
+        const auto& vnode = nod.first;
+        for (int i = 0; i < WIDTH; ++i) {
+            if (vnode.childs.find(i) == vnode.childs.end()) {
+                fr_from_uint64(&ptmp[i], 0);
+            } else {
+                fr_from_uint64(&ptmp[i], vnode.childs.at(i).hash);
+            }
+        }
+        for (auto idx : nod.second) {
+            flat_node nw;
+            nw.commitment = vnode.commitment;
+            nw.p = ptmp;
+            nw.idx = idx;
+            X.push_back(nw);
+        }
+    }
+    // Now we get the multiproofs over X.
+    fr_t r;
+    fr_t rpow;
+    fr_from_uint64(&rpow, 1);
+    fr_from_uint64(&r, (uint64_t)rr);
+    vector<fr_t> g(WIDTH);
+    for (int i = 0; i < WIDTH; ++i) {
+        fr_from_uint64(&g[i], 0);
+    }
+    for (auto& x : X) {
+        auto q = in_domain_q(x.p, x.idx);
+        assert(q.size() == WIDTH);
+        for (int i = 0; i < WIDTH; ++i) {
+            fr_t tmp;
+            fr_mul(&tmp, &rpow, &q[i]);
+            fr_add(&g[i], &g[i], &tmp);
+        }
+        fr_mul(&rpow, &rpow, &r);
+    }
+    g1_t gCommit; // D as per the document.
+    poly_commitment_fr(&gCommit, g);
+
+    // TODO(pranav): change to actual randomness.
+    uint64_t t = 56;
+    fr_t tfr;
+    fr_from_uint64(&tfr, t);
+    // Do the same thing for h, but @ t.
+    vector<fr_t> h(WIDTH);
+    for (int i = 0; i < WIDTH; ++i) {
+        fr_from_uint64(&h[i], 0);
+    }
+    fr_from_uint64(&rpow, 1);
+    fr_from_uint64(&r, (uint64_t)rr);
+    for (auto& x : X) {
+        fr_t denom_inv = tfr;
+        fr_sub(&denom_inv, &denom_inv, ffts_.expanded_roots_of_unity + x.idx);
+        fr_inv(&denom_inv, &denom_inv);
+        for (int i = 0; i < WIDTH; ++i) {
+            fr_t tmp = rpow;
+            fr_mul(&tmp, &tmp, &x.p[i]);
+            fr_mul(&tmp, &tmp, &denom_inv);
+            fr_add(&h[i], &h[i], &tmp);
+        }
+        fr_mul(&rpow, &rpow, &r);
+    }
+
+    // get proofs (and values) for h and g evaluated at random t.
+    // need to port both h and g to poly and then call 
+    // `compute_proof_multi` api.
+    // to evaluate, need to call `eval_poly` api.
+    return out;
+}
+
 VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
 
     map<vector<int>, pair<VerkleNode, set<int> > > required_proofs;
@@ -196,6 +296,7 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
             }
         }
     }
+    // TODO(pranav): Make this correct after implementing kzg_multiproof.
     VerkleProof out;
     // Construct the commitments to send and the proofs.
     // proofs are to be sent based on the indexes required per commitment.

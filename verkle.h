@@ -9,7 +9,7 @@ using namespace std;
 
 // Constants
 
-// TODO(pranav): Make this tunable.
+// TODO(pranav): Make this tunable from CLI.
 // This means that each verkle tree node will have 2^WIDTH_BITS = 16 children.
 constexpr int WIDTH_BITS = 4;
 constexpr int KEYSIZE = 265;
@@ -27,6 +27,7 @@ struct VerkleNode {
   g1_t commitment = g1_generator;
   std::string key = "";
   std::string value = "";
+  // TODO(pranav): perhaps this should store pointer to children.
   std::map<int, VerkleNode> childs;
   uint64_t hash = 0;
 };
@@ -87,9 +88,11 @@ class VerkleTree {
   void compute_commitments();
   void dfs_commitment(VerkleNode& x);
   void poly_commitment(g1_t* out, const vector<uint64_t>& vals);
+  void poly_commitment_fr(g1_t* out, const vector<fr_t>& vals);
   std::vector< pair<vector<int>, pair<VerkleNode, int>> >
        get_path(const string& key);
   VerkleProof get_verkle_multiproof(const vector<string>& keys);
+  VerkleProof kzg_gen_multiproof(vector< pair<VerkleNode, set<int> > > nodes);
   // Computes (f(x) - f(idx)) / (x - w^idx)
   // Where f(x) is the poly corresponding to `in`.
   vector<fr_t> in_domain_q(const vector<fr_t>& in, int idx);
