@@ -36,6 +36,7 @@ struct VerkleProof {
   vector<g1_t> commitments;
   g1_t D;
   g1_t proof;
+  fr_t eval;
 };
 
 class VerkleTree {
@@ -96,7 +97,9 @@ class VerkleTree {
   // Computes (f(x) - f(idx)) / (x - w^idx)
   // Where f(x) is the poly corresponding to `in`.
   vector<fr_t> in_domain_q(const vector<fr_t>& in, int idx);
-  
+  // Wrapper around the c-kzg library for evaluation and proof of
+  // a poly at a certain point.
+  pair<fr_t, g1_t> eval_and_proof(const vector<fr_t>& p, fr_t pt);
   
 private:
   VerkleNode root_;

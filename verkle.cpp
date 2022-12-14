@@ -195,6 +195,24 @@ vector<fr_t> VerkleTree::in_domain_q(const vector<fr_t>& in, int idx) {
     return out;
 }
 
+pair<fr_t, g1_t> VerkleTree::eval_and_proof(const vector<fr_t>& p, fr_t pt) {
+    // Poly structure as followed by z-kzg library.
+    // C semantics.
+    assert(p.size() == WIDTH);
+    poly ply;
+    new_poly(&ply, WIDTH);
+    for (int i = 0; i < WIDTH; ++i) {
+        ply.coeffs[i] = p[i];
+    }
+    fr_t eval;
+    g1_t proof;
+    // TODO(pranav): Add the assert sanity checks for all c-kzg lib calls.
+    eval_poly(&eval, &ply, &pt);
+    assert(compute_proof_single(&proof, &ply, &pt, &kzgs_) == C_KZG_OK);
+    free_poly(&ply);
+    return make_pair(eval, proof);
+}
+
 VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
                                          set<int> > > nodes) {
     VerkleProof out;
@@ -271,9 +289,17 @@ VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
     }
 
     // get proofs (and values) for h and g evaluated at random t.
-    // need to port both h and g to poly and then call 
-    // `compute_proof_multi` api.
-    // to evaluate, need to call `eval_poly` api.
+    auto h_eval_proof = eval_and_proof(h, tfr);
+    auto g_eval_proof = eval_and_proof(g, tfr);
+
+    fr_t qq;
+    fr_from_uint64(&qq, 22);
+    g1_t combined_proof;
+    g1_mul(&combined_proof, &g_eval_proof.second, &qq);
+    g1_add_or_dbl(&combined_proof, &combined_proof, &h_eval_proof.second);
+    out.proof = combined_proof;
+    out.D = gCommit;
+    out.eval = h_eval_proof.first;
     return out;
 }
 
