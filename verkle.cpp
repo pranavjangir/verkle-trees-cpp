@@ -213,20 +213,21 @@ pair<fr_t, g1_t> VerkleTree::eval_and_proof(const vector<fr_t>& p, fr_t pt) {
     return make_pair(eval, proof);
 }
 
+struct flat_node {
+        g1_t commitment;
+        vector<fr_t> p;
+        int idx;
+};
+
 VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
                                          set<int> > > nodes) {
     VerkleProof out;
-    // Compressed commitments :
+    // De-duplicated commitments :
     for (auto& x : nodes) {
         out.commitments.push_back(x.first.commitment);
     }
     // Generate a list of <commitment, poly, single_index_to_proof>
     // That is, flatten the `nodes` structure.
-    struct flat_node {
-        g1_t commitment;
-        vector<fr_t> p;
-        int idx;
-    };
     vector< flat_node > X;
     for (auto& nod : nodes) {
         vector<fr_t> ptmp(WIDTH);
@@ -333,6 +334,61 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
     VerkleProof out = kzg_gen_multiproof(to_proof);
     cout << "Proof size (# of elements) : "  << out.commitments.size() << endl;
     return out;
+}
+
+bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const VerkleProof& proof) {
+    map<vector<int>, pair<VerkleNode, set<int> > > required_proofs;
+    for (auto& key : keys) {
+        auto node_path = get_path(key);
+        // update the main database.
+        for (auto& ni : node_path) {
+            // add indexes to the node.
+            if (required_proofs.find(ni.first) == required_proofs.end()) {
+                set<int> tmp;
+                tmp.insert(ni.second.second);
+                required_proofs[ni.first] = 
+                    (make_pair(ni.second.first, tmp));
+            } else {
+                auto& val = required_proofs[ni.first];
+                val.second.insert(ni.second.second);
+            }
+        }
+    }
+    vector< pair<VerkleNode, set<int> > > to_proof;
+    for (auto path_and_req_proof : required_proofs) {
+        to_proof.push_back(path_and_req_proof.second);
+    }
+
+    vector< flat_node > X;
+    for (auto& nod : to_proof) {
+        vector<fr_t> ptmp(WIDTH);
+        const auto& vnode = nod.first;
+        for (int i = 0; i < WIDTH; ++i) {
+            if (vnode.childs.find(i) == vnode.childs.end()) {
+                fr_from_uint64(&ptmp[i], 0);
+            } else {
+                fr_from_uint64(&ptmp[i], vnode.childs.at(i).hash);
+            }
+        }
+        for (auto idx : nod.second) {
+            flat_node nw;
+            nw.commitment = vnode.commitment;
+            nw.p = ptmp;
+            nw.idx = idx;
+            X.push_back(nw);
+        }
+    }
+    vector<g1_t> commitments;
+    vector<int> indices;
+    vector<fr_t> Y;
+
+    for (auto& x : X) {
+        commitments.push_back(x.commitment);
+        indices.push_back(x.idx);
+        Y.push_back(x.p[x.idx]);
+    }
+
+    return kzg_check_multiproof(commitments, indices, Y, proof);
 }
 
 int main() {

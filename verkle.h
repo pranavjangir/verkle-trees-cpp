@@ -12,7 +12,7 @@ using namespace std;
 // TODO(pranav): Make this tunable from CLI.
 // This means that each verkle tree node will have 2^WIDTH_BITS = 16 children.
 constexpr int WIDTH_BITS = 4;
-constexpr int KEYSIZE = 265;
+constexpr int KEYSIZE = 265; // Fixed keysize of 256 bits.
 constexpr int WIDTH = (1 << WIDTH_BITS);
 
 static const scalar_t secret = {0xa4, 0x73, 0x31, 0x95, 0x28, 0xc8, 0xb6, 0xea, 0x4d, 0x08, 0xcc,
@@ -93,7 +93,14 @@ class VerkleTree {
   std::vector< pair<vector<int>, pair<VerkleNode, int>> >
        get_path(const string& key);
   VerkleProof get_verkle_multiproof(const vector<string>& keys);
+  // For given keys, check that the values match using proofs.
+  // Commitments list and proofs are present in `proof`.
+  bool check_verkle_multiproof(const vector<string>& keys, const VerkleProof& proof);
   VerkleProof kzg_gen_multiproof(vector< pair<VerkleNode, set<int> > > nodes);
+  bool kzg_check_multiproof(const vector<g1_t>& commitments, 
+                            const vector<int>& indices,
+                            const vector<fr_t>& Y,
+                            const VerkleProof& proof);
   // Computes (f(x) - f(idx)) / (x - w^idx)
   // Where f(x) is the poly corresponding to `in`.
   vector<fr_t> in_domain_q(const vector<fr_t>& in, int idx);
