@@ -216,6 +216,10 @@ pair<fr_t, g1_t> VerkleTree::eval_and_proof(const vector<fr_t>& p, fr_t pt) {
 VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
                                          set<int> > > nodes) {
     VerkleProof out;
+    // Compressed commitments :
+    for (auto& x : nodes) {
+        out.commitments.push_back(x.first.commitment);
+    }
     // Generate a list of <commitment, poly, single_index_to_proof>
     // That is, flatten the `nodes` structure.
     struct flat_node {
@@ -327,6 +331,7 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
         to_proof.push_back(path_and_req_proof.second);
     }
     VerkleProof out = kzg_gen_multiproof(to_proof);
+    cout << "Proof size (# of elements) : "  << out.commitments.size() << endl;
     return out;
 }
 
