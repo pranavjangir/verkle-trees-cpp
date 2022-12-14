@@ -322,11 +322,11 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
             }
         }
     }
-    // TODO(pranav): Make this correct after implementing kzg_multiproof.
-    VerkleProof out;
-    // Construct the commitments to send and the proofs.
-    // proofs are to be sent based on the indexes required per commitment.
-
+    vector< pair<VerkleNode, set<int> > > to_proof;
+    for (auto path_and_req_proof : required_proofs) {
+        to_proof.push_back(path_and_req_proof.second);
+    }
+    VerkleProof out = kzg_gen_multiproof(to_proof);
     return out;
 }
 
