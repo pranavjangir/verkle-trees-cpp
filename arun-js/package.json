@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "dependencies": {
+    "merkle-patricia-tree": "^4.2.4"
+  }
+}
