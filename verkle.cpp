@@ -336,6 +336,18 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
     return out;
 }
 
+bool VerkleTree::kzg_check_multiproof(const vector<g1_t>& commitments, 
+                            const vector<int>& indices,
+                            const vector<fr_t>& Y,
+                            const VerkleProof& proof) {
+    // calculate E(t) and g2(t).
+    // Using given D (in `proof`) :=
+    // Verify that (D - E - g2(t))
+    // Follow the document!
+    
+    return true;
+}
+
 bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const VerkleProof& proof) {
     map<vector<int>, pair<VerkleNode, set<int> > > required_proofs;
     for (auto& key : keys) {
