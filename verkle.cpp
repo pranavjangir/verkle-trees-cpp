@@ -110,6 +110,24 @@ void VerkleTree::poly_commitment_fr(g1_t* out, const vector<fr_t>& vals) {
     g1_linear_combination(out, s1_lagrange, valfr, WIDTH);
 }
 
+// apply pippenger on given values.
+void general_pippenger(g1_t* out, const vector<g1_t>& A, const vector<fr_t>& B) {
+    // Calculate A*B dot product.
+    assert(A.size() == B.size());
+    int n = A.size();
+    // Forced to do this because pippenger APIs expect arrays.
+    g1_t* a = new g1_t[n];
+    fr_t* b = new fr_t[n];
+    for (int i = 0; i < n; ++i) {
+        a[i] = A[i];
+        b[i] = B[i];
+    }
+    // TODO(pranav): make sure that the value pointed to by `out` is correct.
+    g1_linear_combination(out, a, b, n);
+    free(a);
+    free(b);
+}
+
 void VerkleTree::dfs_commitment(VerkleNode& x) {
     if (x.is_leaf) {
         auto hasher = std::hash<std::string>();
@@ -343,9 +361,41 @@ bool VerkleTree::kzg_check_multiproof(const vector<g1_t>& commitments,
     // calculate E(t) and g2(t).
     // Using given D (in `proof`) :=
     // Verify that (D - E - g2(t))
-    // Follow the document!
-    
-    return true;
+    assert(commitments.size() == indices.size());
+    assert(Y.size() == commitments.size());
+    fr_t r, t, q, g2_at_t;
+    fr_from_uint64(&r, rr);
+    fr_from_uint64(&t, tt);
+    fr_from_uint64(&q, 22);
+    fr_t rpow;
+    fr_from_uint64(&rpow, 1);
+    fr_from_uint64(&g2_at_t, 0);
+    vector<fr_t> e_c(commitments.size());
+    for (int i = 0; i < commitments.size(); ++i) {
+        fr_t tmp, tmp2;
+        fr_sub(&tmp, &t, &ffts_.expanded_roots_of_unity[indices[i]]);
+        fr_div(&e_c[i], &rpow, &tmp);
+        fr_mul(&tmp2, &e_c[i], &Y[i]);
+        fr_add(&g2_at_t, &g2_at_t, &tmp2);
+        fr_mul(&rpow, &rpow, &r);
+    }
+    g1_t E;
+    general_pippenger(&E, commitments, e_c);
+    fr_t w;
+    fr_sub(&w, &proof.eval, &g2_at_t);
+
+    g1_t final_compressed_proof;
+    g1_mul(&final_compressed_proof, &proof.D, &q);
+    g1_add_or_dbl(&final_compressed_proof, &final_compressed_proof, &E);
+    fr_t val_to_prove = w;
+    fr_mul(&val_to_prove, &val_to_prove, &q);
+    fr_add(&val_to_prove, &val_to_prove, &proof.eval);
+
+    // Final verification using a single pairing call.
+    bool verification = true;
+    check_proof_single(&verification, &final_compressed_proof, 
+                    &proof.proof, &t, &val_to_prove, &kzgs_);
+    return verification;
 }
 
 bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const VerkleProof& proof) {
