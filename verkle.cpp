@@ -1,7 +1,10 @@
 #include "verkle.h"
 #include "blst.hpp"
+#include "ParserCode/json.hpp"
 
 using namespace std;
+
+using json = nlohmann::json;
 
 // Fiat shamir heuristic random values.
 // TODO(pranav): These should ideally be calculated 
@@ -20,10 +23,11 @@ std::vector<int> VerkleTree::get_key_path(const std::string& key) {
     }
     for (int i = 0; i < stripped.length(); ++i) {
         int val = -1;
-        if (stripped[i] >= '0' && stripped[i] <= '9') 
+        if (stripped[i] >= '0' && stripped[i] <= '9') {
             val = (stripped[i] - '0');
-        if (stripped[i] >= 'a' && stripped[i] <= 'f') 
+        } else if (stripped[i] >= 'a' && stripped[i] <= 'f') {
             val = 10 + (stripped[i] - 'a');
+        }
         assert(val >= 0 && val <= 15);
         out.push_back(val);
     }
@@ -34,8 +38,8 @@ std::vector<int> VerkleTree::get_key_path(const std::string& key) {
 void VerkleTree::plain_insert_verkle_node(const std::string& key,
  const std::string value) {
     // starting from root, iterate downwards and add the corresponding node.
-    VerkleNode* cur = &root_;
-    VerkleNode* prev = cur;
+    shared_ptr<VerkleNode> cur = root_;
+    shared_ptr<VerkleNode> prev = root_;
     // keep moving to children till you encounter a node that is not leaf.
     // or we may exit early as well.
     std::vector<int> ids = get_key_path(key);
@@ -47,13 +51,13 @@ void VerkleTree::plain_insert_verkle_node(const std::string& key,
         ptr++;
         // Found a child.
         if (cur->childs.find(idx) != cur->childs.end()) {
-            cur = &cur->childs[idx];
+            cur = cur->childs[idx];
         } else {
-            VerkleNode nwnode;
-            nwnode.is_leaf = true;
-            nwnode.key = key;
-            nwnode.value = value;
-            cur->childs[idx] = nwnode;
+            shared_ptr<VerkleNode> nwnode = make_shared<VerkleNode>();
+            nwnode->is_leaf = true;
+            nwnode->key = key;
+            nwnode->value = value;
+            cur->childs[idx] = std::move(nwnode);
             return;
         }
     }
@@ -65,11 +69,11 @@ void VerkleTree::plain_insert_verkle_node(const std::string& key,
     // Child must be present if we reach here.
     // and the node must be expanded.
     assert(prev->childs.find(idx) != prev->childs.end());
-    std::string cur_key = prev->childs[idx].key;
-    std::string cur_val = prev->childs[idx].value;
-    VerkleNode nwnode;
+    std::string cur_key = prev->childs[idx]->key;
+    std::string cur_val = prev->childs[idx]->value;
+    shared_ptr<VerkleNode> nwnode = make_shared<VerkleNode>();
     // Delete existing leaf.
-    cur->childs[idx] = nwnode;
+    prev->childs[idx] = std::move(nwnode);
     // Insert the req node.
     plain_insert_verkle_node(key, value);
     // Reinsert the deleted leaf.
@@ -91,7 +95,7 @@ uint64_t hash_commitment(g1_t* comm) {
 }
 
 void VerkleTree::poly_commitment(g1_t* out, const vector<uint64_t>& vals) {
-    fr_t valfr[WIDTH + 1];
+    fr_t valfr[WIDTH];
     for (int i = 0; i < WIDTH; ++i) {
         fr_from_uint64(&valfr[i], vals[i]);
     }
@@ -102,7 +106,7 @@ void VerkleTree::poly_commitment(g1_t* out, const vector<uint64_t>& vals) {
 // Same as above but different input parameters. 
 // I messed up while writing lol.
 void VerkleTree::poly_commitment_fr(g1_t* out, const vector<fr_t>& vals) {
-    fr_t valfr[WIDTH + 1];
+    fr_t valfr[WIDTH];
     for (int i = 0; i < WIDTH; ++i) {
         valfr[i] = vals[i];
     }
@@ -128,26 +132,26 @@ void general_pippenger(g1_t* out, const vector<g1_t>& A, const vector<fr_t>& B) 
     free(b);
 }
 
-void VerkleTree::dfs_commitment(VerkleNode& x) {
-    if (x.is_leaf) {
+void VerkleTree::dfs_commitment(shared_ptr<VerkleNode>& x) {
+    if (x->is_leaf) {
         auto hasher = std::hash<std::string>();
-        uint64_t hashv = hasher(x.key);
-        hashv += hasher(x.value);
-        x.hash = hashv;
-        cerr << "leaf hash : " << x.hash << endl;
+        uint64_t hashv = hasher(x->key);
+        hashv += hasher(x->value);
+        x->hash = hashv;
+        cerr << "leaf hash : " << x->hash << endl;
         // No need to calculate commitment.
         return;
     }
     std::vector<uint64_t> child_hashes(WIDTH, 0);
     for (int i = 0; i < WIDTH; ++i) {
-        if (x.childs.find(i) != x.childs.end()) {
-            dfs_commitment(x.childs[i]);
-            child_hashes[i] = x.childs[i].hash;
+        if (x->childs.find(i) != x->childs.end()) {
+            dfs_commitment(x->childs[i]);
+            child_hashes[i] = x->childs[i]->hash;
         }
     }
-    poly_commitment(&x.commitment, child_hashes);
-    x.hash = hash_commitment(&x.commitment);
-    cerr << "internal hash : " << x.hash << endl;
+    poly_commitment(&x->commitment, child_hashes);
+    x->hash = hash_commitment(&x->commitment);
+    cerr << "internal hash : " << x->hash << endl;
 }
 
 void VerkleTree::compute_commitments() {
@@ -155,28 +159,28 @@ void VerkleTree::compute_commitments() {
     dfs_commitment(root_);
 }
 
-std::vector< pair<vector<int>, pair<VerkleNode, int>> > 
+std::vector< pair<vector<int>, pair<shared_ptr<VerkleNode>, int>> > 
     VerkleTree::get_path(const string& key) {
     // start from root and get the path.
 
-    vector< pair<vector<int>, pair<VerkleNode, int>> > out;
+    vector< pair<vector<int>, pair<shared_ptr<VerkleNode>, int>> > out;
     auto curnode = root_;
     auto idx = get_key_path(key);
     int ptr = 0;
     vector<int> path_so_far;
     path_so_far.push_back(-1);
-    while(curnode.is_leaf == false) {
+    while(curnode->is_leaf == false) {
         int nxt = idx[ptr];
         ptr++;
         out.push_back(make_pair(path_so_far, make_pair(curnode, nxt)));
-        curnode = curnode.childs[nxt];
+        curnode = curnode->childs[nxt];
         path_so_far.push_back(nxt);
     }
-    if (!curnode.is_leaf) {
+    if (!curnode->is_leaf) {
         cout << "get_path::End node is not leaf." << endl;
         assert(false);
     }
-    if (curnode.key != key) {
+    if (curnode->key != key) {
         // It is expected that there will be some path.
         cout << "get_path::No path found." << endl;
         assert(false);
@@ -237,13 +241,34 @@ struct flat_node {
         int idx;
 };
 
-VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
+// For debugging purposes.
+// Prints prime field element.
+void prfp(fp_t x) {
+    int sz = 384/8/sizeof(limb_t);
+    for (int i = 0; i < sz; ++i) {
+        cout << "i = " << i << " --- " << x.l[i] << endl;
+    }
+    cout << "<><><><><><><><><><><><><><>\n";
+}
+
+// For debugging purposes.
+// Prints field element.
+void prfr(fr_t x) {
+    int sz = 256/8/sizeof(limb_t);
+    for (int i = 0; i < sz; ++i) {
+        cout << "i = " << i << " --- " << x.l[i] << endl;
+    }
+    cout << "<><><><><><><><><><><><><><>\n";
+}
+
+VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<shared_ptr<VerkleNode>,
                                          set<int> > > nodes) {
     VerkleProof out;
     // De-duplicated commitments :
     for (auto& x : nodes) {
-        out.commitments.push_back(x.first.commitment);
+        out.commitments.push_back(x.first->commitment);
     }
+    cout << "Proof size (# of elements) : "  << out.commitments.size() << endl;
     // Generate a list of <commitment, poly, single_index_to_proof>
     // That is, flatten the `nodes` structure.
     vector< flat_node > X;
@@ -251,21 +276,21 @@ VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
         vector<fr_t> ptmp(WIDTH);
         const auto& vnode = nod.first;
         for (int i = 0; i < WIDTH; ++i) {
-            if (vnode.childs.find(i) == vnode.childs.end()) {
+            if (vnode->childs.find(i) == vnode->childs.end()) {
                 fr_from_uint64(&ptmp[i], 0);
             } else {
-                fr_from_uint64(&ptmp[i], vnode.childs.at(i).hash);
+                fr_from_uint64(&ptmp[i], vnode->childs.at(i)->hash);
             }
         }
         for (auto idx : nod.second) {
             flat_node nw;
-            nw.commitment = vnode.commitment;
+            nw.commitment = vnode->commitment;
             nw.p = ptmp;
             nw.idx = idx;
             X.push_back(nw);
         }
     }
-    // Now we get the multiproofs over X.
+
     fr_t r;
     fr_t rpow;
     fr_from_uint64(&rpow, 1);
@@ -285,12 +310,14 @@ VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
         fr_mul(&rpow, &rpow, &r);
     }
     g1_t gCommit; // D as per the document.
-    poly_commitment_fr(&gCommit, g);
+    poly gpoly;
+    new_poly(&gpoly, g.size());
+    for (int i = 0; i < g.size(); ++i) gpoly.coeffs[i] = g[i];
+    commit_to_poly(&gCommit, &gpoly, &kzgs_);
+    free_poly(&gpoly);
 
-    // TODO(pranav): change to actual randomness.
-    uint64_t t = 56;
     fr_t tfr;
-    fr_from_uint64(&tfr, t);
+    fr_from_uint64(&tfr, tt);
     // Do the same thing for h, but @ t.
     vector<fr_t> h(WIDTH);
     for (int i = 0; i < WIDTH; ++i) {
@@ -310,6 +337,12 @@ VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
         }
         fr_mul(&rpow, &rpow, &r);
     }
+    g1_t E;
+    poly hpoly;
+    new_poly(&hpoly, h.size());
+    for (int i = 0; i < h.size(); ++i) hpoly.coeffs[i] = h[i];
+    commit_to_poly(&E, &hpoly, &kzgs_);
+    free_poly(&hpoly);
 
     // get proofs (and values) for h and g evaluated at random t.
     auto h_eval_proof = eval_and_proof(h, tfr);
@@ -322,13 +355,18 @@ VerkleProof VerkleTree::kzg_gen_multiproof(vector< pair<VerkleNode,
     g1_add_or_dbl(&combined_proof, &combined_proof, &h_eval_proof.second);
     out.proof = combined_proof;
     out.D = gCommit;
+    g1_mul(&out.D, &out.D, &qq);
     out.eval = h_eval_proof.first;
+    out.eval2 = g_eval_proof.first;
+    out.commitments.resize(1);
+    out.commitments[0] = E;
+    g1_add_or_dbl(&out.commitments[0], &out.commitments[0], &out.D);
     return out;
 }
 
 VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
 
-    map<vector<int>, pair<VerkleNode, set<int> > > required_proofs;
+    map<vector<int>, pair<shared_ptr<VerkleNode>, set<int> > > required_proofs;
     for (auto& key : keys) {
         auto node_path = get_path(key);
         // update the main database.
@@ -345,12 +383,11 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
             }
         }
     }
-    vector< pair<VerkleNode, set<int> > > to_proof;
+    vector< pair<shared_ptr<VerkleNode>, set<int> > > to_proof;
     for (auto path_and_req_proof : required_proofs) {
         to_proof.push_back(path_and_req_proof.second);
     }
     VerkleProof out = kzg_gen_multiproof(to_proof);
-    cout << "Proof size (# of elements) : "  << out.commitments.size() << endl;
     return out;
 }
 
@@ -384,22 +421,22 @@ bool VerkleTree::kzg_check_multiproof(const vector<g1_t>& commitments,
     fr_t w;
     fr_sub(&w, &proof.eval, &g2_at_t);
 
-    g1_t final_compressed_proof;
-    g1_mul(&final_compressed_proof, &proof.D, &q);
-    g1_add_or_dbl(&final_compressed_proof, &final_compressed_proof, &E);
-    fr_t val_to_prove = w;
+    g1_t final_compressed_commit;
+    g1_mul(&final_compressed_commit, &proof.D, &q);
+    g1_add_or_dbl(&final_compressed_commit, &final_compressed_commit, &E);
+    fr_t val_to_prove = proof.eval2;
     fr_mul(&val_to_prove, &val_to_prove, &q);
     fr_add(&val_to_prove, &val_to_prove, &proof.eval);
 
     // Final verification using a single pairing call.
-    bool verification = true;
-    check_proof_single(&verification, &final_compressed_proof, 
+    bool verification = false;
+    check_proof_single(&verification, &proof.commitments[0],
                     &proof.proof, &t, &val_to_prove, &kzgs_);
     return verification;
 }
 
 bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const VerkleProof& proof) {
-    map<vector<int>, pair<VerkleNode, set<int> > > required_proofs;
+    map<vector<int>, pair<shared_ptr<VerkleNode>, set<int> > > required_proofs;
     for (auto& key : keys) {
         auto node_path = get_path(key);
         // update the main database.
@@ -413,10 +450,11 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const Verkl
             } else {
                 auto& val = required_proofs[ni.first];
                 val.second.insert(ni.second.second);
+                assert(val.first->hash == ni.second.first->hash); // assert same node.
             }
         }
     }
-    vector< pair<VerkleNode, set<int> > > to_proof;
+    vector< pair<shared_ptr<VerkleNode>, set<int> > > to_proof;
     for (auto path_and_req_proof : required_proofs) {
         to_proof.push_back(path_and_req_proof.second);
     }
@@ -426,15 +464,15 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const Verkl
         vector<fr_t> ptmp(WIDTH);
         const auto& vnode = nod.first;
         for (int i = 0; i < WIDTH; ++i) {
-            if (vnode.childs.find(i) == vnode.childs.end()) {
+            if (vnode->childs.find(i) == vnode->childs.end()) {
                 fr_from_uint64(&ptmp[i], 0);
             } else {
-                fr_from_uint64(&ptmp[i], vnode.childs.at(i).hash);
+                fr_from_uint64(&ptmp[i], vnode->childs.at(i)->hash);
             }
         }
         for (auto idx : nod.second) {
             flat_node nw;
-            nw.commitment = vnode.commitment;
+            nw.commitment = vnode->commitment;
             nw.p = ptmp;
             nw.idx = idx;
             X.push_back(nw);
@@ -458,10 +496,25 @@ int main() {
     VerkleTree vt;
     string key = "0x";
     string value = "abcdefg";
+    // string rando = "0123456789abcdef";
+    // vector< string > keys;
     for (int i = 0; i < 64; ++i) {
         key += 'a';
     }
+    // for (int i = 0; i < 500 ; ++i) {
+    //     string k = key;
+    //     for (int j = 0; j < 64; ++j) {
+    //         int r = rand()%16;
+    //         r = (r + 16)%16;
+    //         k += rando[r];
+    //     }
+    //     cout << k << endl;
+    //     vt.plain_insert_verkle_node(k, value);
+    // }
     vt.plain_insert_verkle_node(key, value);
     vt.compute_commitments();
+    auto proof = vt.get_verkle_multiproof({key});
+    bool success = vt.check_verkle_multiproof({key}, proof);
+    cout <<"SUCCESS? :::: "<< success << endl;
     return 0;
 }
