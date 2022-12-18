@@ -19,6 +19,14 @@ void generate_trusted_setup(g1_t *s1, g2_t *s2, const scalar_t *secret, const ui
     }
 }
 
+void prfr(fr_t x) {
+    int sz = 256/8/sizeof(limb_t);
+    for (int i = 0; i < sz; ++i) {
+        cout << "i = " << i << " --- " << x.l[i] << endl;
+    }
+    cout << "<><><><><><><><><><><><><><>\n";
+}
+
 static const scalar_t secret = {0xa4, 0x73, 0x31, 0x95, 0x28, 0xc8, 0xb6, 0xea, 0x4d, 0x08, 0xcc,
                                 0x53, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -66,13 +74,16 @@ int main() {
     // and the polynomial wont be x^n - x0^n.
     // Check https://dankradfeist.de/ethereum/2020/06/16/kate-polynomial-commitments.html
     // for how multiproofs should actually be done.
-    fr_from_uint64(&x, 5431);
+    fr_from_uint64(&x, 1);
     assert(C_KZG_OK == compute_proof_multi(&proof, &p, &x, coset_len, &ks2));
 
     // y_i is the value of the polynomial at each x_i
     for (int i = 0; i < coset_len; i++) {
         fr_mul(&tmp, &x, &ks2.fs->expanded_roots_of_unity[i]);
+        prfr(tmp);
+        cout << ">>>>>>>>>>>>>>>>>>>>>\n";
         eval_poly(&y[i], &p, &tmp);
+        prfr(y[i]);
     }
 
     // Verify the proof that the (unknown) polynomial has value y_i at x_i
