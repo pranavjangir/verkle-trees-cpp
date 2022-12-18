@@ -11,7 +11,7 @@ using namespace std;
 
 // TODO(pranav): Make this tunable from CLI.
 // This means that each verkle tree node will have 2^WIDTH_BITS = 16 children.
-constexpr int WIDTH_BITS = 4;
+constexpr int WIDTH_BITS = 12;
 constexpr int KEYSIZE = 265; // Fixed keysize of 256 bits.
 constexpr int WIDTH = (1 << WIDTH_BITS);
 

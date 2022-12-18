@@ -14,22 +14,31 @@ int rr = 22;
 int tt = 42;
 
 std::vector<int> VerkleTree::get_key_path(const std::string& key) {
-    // TODO(pranav): Remove this assertion later.
-    assert(WIDTH_BITS == 4);
+    // Bits must be multiple of 4.
+    assert(WIDTH_BITS%4 == 0);
     std::vector<int> out;
     std::string stripped = key;
     if (key.length() == 64 + 2) { // key = 0x34fd....
         stripped = key.substr(2);
     }
-    for (int i = 0; i < stripped.length(); ++i) {
-        int val = -1;
-        if (stripped[i] >= '0' && stripped[i] <= '9') {
-            val = (stripped[i] - '0');
-        } else if (stripped[i] >= 'a' && stripped[i] <= 'f') {
-            val = 10 + (stripped[i] - 'a');
+    for (int i = 0; i < stripped.length(); i += (WIDTH_BITS / 4)) {
+        int pw = 1;
+        int idx = 0;
+        for (int j = i ; j < i + (WIDTH_BITS / 4) && j < stripped.length(); ++j) {
+            int val = -1;
+            if (stripped[j] >= '0' && stripped[j] <= '9') {
+                val = (stripped[j] - '0');
+            } else if (stripped[j] >= 'a' && stripped[j] <= 'f') {
+                val = 10 + (stripped[j] - 'a');
+            }
+            if (val < 0 || val > 15) {
+                cout << stripped[j] << " ---- " << val << endl;
+            }
+            assert(val >= 0 && val <= 15);
+            idx += pw*val;
+            pw *= 16;
         }
-        assert(val >= 0 && val <= 15);
-        out.push_back(val);
+        out.push_back(idx);
     }
     reverse(out.begin(), out.end());
     return out;
@@ -138,7 +147,7 @@ void VerkleTree::dfs_commitment(shared_ptr<VerkleNode>& x) {
         uint64_t hashv = hasher(x->key);
         hashv += hasher(x->value);
         x->hash = hashv;
-        cerr << "leaf hash : " << x->hash << endl;
+        // cerr << "leaf hash : " << x->hash << endl;
         // No need to calculate commitment.
         return;
     }
@@ -151,7 +160,7 @@ void VerkleTree::dfs_commitment(shared_ptr<VerkleNode>& x) {
     }
     poly_commitment(&x->commitment, child_hashes);
     x->hash = hash_commitment(&x->commitment);
-    cerr << "internal hash : " << x->hash << endl;
+    // cerr << "internal hash : " << x->hash << endl;
 }
 
 void VerkleTree::compute_commitments() {
@@ -493,7 +502,7 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const Verkl
 
 int main() {
 
-    std::ifstream file("ParserCode/data2000-1.json");
+    std::ifstream file("ParserCode/data1.json");
     if (!file.is_open()) {
         std::cerr << "Failed to open file" << std::endl;
         return 1;
@@ -550,10 +559,11 @@ int main() {
     for (const auto& block : map) {
         for (const auto& key : block.second) {
             keys_for_proof.push_back(key);
-            if (keys_for_proof.size() > 200) break;
+            // if (keys_for_proof.size() > 200) break;
         }
-        if (keys_for_proof.size() > 200) break;
+        // if (keys_for_proof.size() > 200) break;
     }
+    cout << keys_for_proof.size() << " is the amount of key proofs we want!" << endl;
     auto proof = vt.get_verkle_multiproof(keys_for_proof);
     bool success = vt.check_verkle_multiproof(keys_for_proof, proof);
     cout <<"SUCCESS? :::: "<< success << endl;
