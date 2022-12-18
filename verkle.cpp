@@ -492,29 +492,70 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys, const Verkl
 }
 
 int main() {
-    std::cout << "Dummy main function!\n";
-    VerkleTree vt;
-    string key = "0x";
-    string value = "abcdefg";
-    // string rando = "0123456789abcdef";
-    // vector< string > keys;
-    for (int i = 0; i < 64; ++i) {
-        key += 'a';
+
+    std::ifstream file("ParserCode/data2000-1.json");
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file" << std::endl;
+        return 1;
     }
-    // for (int i = 0; i < 500 ; ++i) {
-    //     string k = key;
-    //     for (int j = 0; j < 64; ++j) {
-    //         int r = rand()%16;
-    //         r = (r + 16)%16;
-    //         k += rando[r];
-    //     }
-    //     cout << k << endl;
-    //     vt.plain_insert_verkle_node(k, value);
-    // }
-    vt.plain_insert_verkle_node(key, value);
+
+    // Parse the JSON object from the file
+    json data;
+    file >> data;
+
+    // Create a map to store the key-value pairs
+    std::unordered_map<std::string, std::vector<std::string>> map;
+
+    // Iterate over the keys in the JSON object
+    for (json::iterator it = data.begin(); it != data.end(); ++it) {
+        // Get the key and value from the iterator
+        std::string key = it.key();
+        json value = it.value();
+
+        // Make sure the value is a JSON array
+        if (!value.is_array()) {
+        std::cerr << "JSON value is not an array" << std::endl;
+        return 1;
+        }
+
+        // Create a vector to store the strings in the JSON array
+        std::vector<std::string> vec;
+
+        // Iterate over the elements in the JSON array
+        for (json::iterator jt = value.begin(); jt != value.end(); ++jt) {
+        // Make sure the element is a string
+        if (!jt->is_string()) {
+            std::cerr << "JSON array element is not a string" << std::endl;
+            return 1;
+        }
+
+        // Add the string to the vector
+        vec.push_back(*jt);
+        }
+
+        // Add the key-value pair to the map
+        map[key] = vec;
+    }
+
+    cout << "Start tree operations now!" << endl;
+    VerkleTree vt;
+    for (const auto& block : map) {
+        for (const auto& key : block.second) {
+            vt.plain_insert_verkle_node(key, "pranav");
+        }
+    }
+    // vt.plain_insert_verkle_node(key, value);
     vt.compute_commitments();
-    auto proof = vt.get_verkle_multiproof({key});
-    bool success = vt.check_verkle_multiproof({key}, proof);
+    vector< string > keys_for_proof;
+    for (const auto& block : map) {
+        for (const auto& key : block.second) {
+            keys_for_proof.push_back(key);
+            if (keys_for_proof.size() > 200) break;
+        }
+        if (keys_for_proof.size() > 200) break;
+    }
+    auto proof = vt.get_verkle_multiproof(keys_for_proof);
+    bool success = vt.check_verkle_multiproof(keys_for_proof, proof);
     cout <<"SUCCESS? :::: "<< success << endl;
     return 0;
 }
