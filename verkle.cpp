@@ -1,3 +1,4 @@
+#include <chrono>
 #include "verkle.h"
 #include "blst.hpp"
 #include "ParserCode/json.hpp"
@@ -547,13 +548,18 @@ int main() {
     }
 
     cout << "Start tree operations now!" << endl;
+    auto insert_start = std::chrono::high_resolution_clock::now();
     VerkleTree vt;
     for (const auto& block : map) {
         for (const auto& key : block.second) {
             vt.plain_insert_verkle_node(key, "pranav");
         }
     }
-    // vt.plain_insert_verkle_node(key, value);
+    auto insert_end = std::chrono::high_resolution_clock::now();
+    auto time_insert = std::chrono::duration_cast<std::chrono::seconds>
+                        (insert_end - insert_start);
+    cout << "Time to insert all keys : " 
+         << time_insert.count() << " seconds." << endl;
     vt.compute_commitments();
     vector< string > keys_for_proof;
     for (const auto& block : map) {
@@ -564,8 +570,22 @@ int main() {
         // if (keys_for_proof.size() > 200) break;
     }
     cout << keys_for_proof.size() << " is the amount of key proofs we want!" << endl;
+    auto proof_start = std::chrono::high_resolution_clock::now();
     auto proof = vt.get_verkle_multiproof(keys_for_proof);
+    auto proof_end = std::chrono::high_resolution_clock::now();
+    auto time_proof = std::chrono::duration_cast<std::chrono::seconds>
+                        (proof_end - proof_start);
+    cout << "Time to generate proof for all keys : " 
+         << time_proof.count() << " seconds." << endl;
+    
+    auto verification_start = std::chrono::high_resolution_clock::now();
     bool success = vt.check_verkle_multiproof(keys_for_proof, proof);
+    auto verification_end = std::chrono::high_resolution_clock::now();
+    auto time_verification = std::chrono::duration_cast<std::chrono::seconds>
+                        (verification_end - verification_start);
+
+    cout << "Time to verify proof for all keys : " 
+         << time_verification.count() << " seconds." << endl;
     cout <<"SUCCESS? :::: "<< success << endl;
     return 0;
 }
