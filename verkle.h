@@ -14,6 +14,7 @@ using namespace std;
 constexpr int WIDTH_BITS = 4;
 constexpr int KEYSIZE = 265;  // Fixed keysize of 256 bits.
 constexpr int WIDTH = (1 << WIDTH_BITS);
+constexpr bool use_kzg = true;  // If false, we use IPA type vector commitment.
 
 static const scalar_t secret = {0xa4, 0x73, 0x31, 0x95, 0x28, 0xc8, 0xb6, 0xea,
                                 0x4d, 0x08, 0xcc, 0x53, 0x18, 0x00, 0x00, 0x00,
@@ -33,6 +34,7 @@ struct VerkleNode {
 struct VerkleProof {
   vector<g1_t> commitments;
   g1_t D;
+  g1_t E;
   g1_t proof;
   g1_t proof2;
   fr_t eval;
@@ -52,11 +54,16 @@ class VerkleTree {
     fr_t s_pow, s;
     fr_from_scalar(&s, &secret);
     s_pow = fr_one;
+    Q = g1_identity;
 
     for (uint64_t i = 0; i < WIDTH; i++) {
       g1_mul(&s1[i], &g1_generator, &s_pow);
       g2_mul(&s2[i], &g2_generator, &s_pow);
       fr_mul(&s_pow, &s_pow, &s);
+
+      G[i] = s1[i];
+      g1_mul(&H[i], &G[i], &s_pow);
+      g1_add_or_dbl(&Q, &Q, &G[i]);
     }
     new_fft_settings(&ffts_, WIDTH_BITS);
     new_kzg_settings(&kzgs_, s1, s2, WIDTH, &ffts_);
@@ -85,6 +92,8 @@ class VerkleTree {
   void dfs_commitment(shared_ptr<VerkleNode>& x);
   void poly_commitment(g1_t* out, const vector<uint64_t>& vals);
   void poly_commitment_fr(g1_t* out, const vector<fr_t>& vals);
+  void ipa_poly_commitment(g1_t* out, const vector<uint64_t>& vals);
+  void ipa_poly_commitment_fr(g1_t* out, const vector<fr_t>& vals);
   std::vector<pair<vector<int>, pair<shared_ptr<VerkleNode>, int>>> get_path(
       const string& key);
   VerkleProof get_verkle_multiproof(const vector<string>& keys);
@@ -94,7 +103,12 @@ class VerkleTree {
                                const VerkleProof& proof);
   VerkleProof kzg_gen_multiproof(
       vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes);
+  VerkleProof ipa_gen_multiproof(
+      vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes);
   bool kzg_check_multiproof(const vector<g1_t>& commitments,
+                            const vector<int>& indices, const vector<fr_t>& Y,
+                            const VerkleProof& proof);
+  bool ipa_check_multiproof(const vector<g1_t>& commitments,
                             const vector<int>& indices, const vector<fr_t>& Y,
                             const VerkleProof& proof);
   // Computes (f(x) - f(idx)) / (x - w^idx)
@@ -103,13 +117,22 @@ class VerkleTree {
   // Wrapper around the c-kzg library for evaluation and proof of
   // a poly at a certain point.
   pair<fr_t, g1_t> eval_and_proof(const vector<fr_t>& p, fr_t pt);
+  pair<fr_t, g1_t> ipa_eval_and_proof(const vector<fr_t>& p, fr_t pt);
 
  private:
   shared_ptr<VerkleNode> root_;
+  // KZG specific setup.
   FFTSettings ffts_;
   KZGSettings kzgs_;
   g1_t s1[WIDTH + 1];  // Consider giving extra space.
   g2_t s2[WIDTH + 1];
   g1_t s1_lagrange[WIDTH + 1];
   fr_t inv[WIDTH + 1];
+
+  // IPA specific setup.
+  // This does not require a trusted setup, and can be completely setup by the
+  // verifier.
+  g1_t G[WIDTH + 1];
+  g1_t H[WIDTH + 1];
+  g1_t Q;
 };

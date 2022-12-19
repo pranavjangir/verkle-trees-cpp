@@ -126,6 +126,22 @@ void VerkleTree::poly_commitment_fr(g1_t* out, const vector<fr_t>& vals) {
   g1_linear_combination(out, s1_lagrange, valfr, WIDTH);
 }
 
+void VerkleTree::ipa_poly_commitment(g1_t* out, const vector<uint64_t>& vals) {
+  vector<fr_t> v(vals.size());
+  for (int i = 0; i < vals.size(); ++i) {
+    fr_from_uint64(&v[i], vals[i]);
+  }
+  ipa_poly_commitment_fr(out, v);
+}
+
+void VerkleTree::ipa_poly_commitment_fr(g1_t* out, const vector<fr_t>& vals) {
+  fr_t valfr[WIDTH + 1];
+  for (int i = 0; i < WIDTH; ++i) {
+    valfr[i] = vals[i];
+  }
+  g1_linear_combination(out, G, valfr, WIDTH);
+}
+
 // apply pippenger on given values.
 void general_pippenger(g1_t* out, const vector<g1_t>& A,
                        const vector<fr_t>& B) {
@@ -162,7 +178,11 @@ void VerkleTree::dfs_commitment(shared_ptr<VerkleNode>& x) {
       child_hashes[i] = x->childs[i]->hash;
     }
   }
-  poly_commitment(&x->commitment, child_hashes);
+  if (use_kzg) {
+    poly_commitment(&x->commitment, child_hashes);
+  } else {
+    ipa_poly_commitment(&x->commitment, child_hashes);
+  }
   x->hash = hash_commitment(&x->commitment);
   // cerr << "internal hash : " << x->hash << endl;
 }
@@ -275,6 +295,98 @@ void prfr(fr_t x) {
   cout << "<><><><><><><><><><><><><><>\n";
 }
 
+VerkleProof VerkleTree::ipa_gen_multiproof(
+    vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes) {
+  VerkleProof out;
+  // De-duplicated commitments :
+  for (auto& x : nodes) {
+    out.commitments.push_back(x.first->commitment);
+  }
+  cout << "Proof size IPA (# of elements) : " << out.commitments.size() << endl;
+  // Generate a list of <commitment, poly, single_index_to_proof>
+  // That is, flatten the `nodes` structure.
+  vector<flat_node> X;
+  for (auto& nod : nodes) {
+    vector<fr_t> ptmp(WIDTH);
+    const auto& vnode = nod.first;
+    for (int i = 0; i < WIDTH; ++i) {
+      if (vnode->childs.find(i) == vnode->childs.end()) {
+        fr_from_uint64(&ptmp[i], 0);
+      } else {
+        fr_from_uint64(&ptmp[i], vnode->childs.at(i)->hash);
+      }
+    }
+    for (auto idx : nod.second) {
+      flat_node nw;
+      nw.commitment = vnode->commitment;
+      nw.p = ptmp;
+      nw.idx = idx;
+      X.push_back(nw);
+    }
+  }
+
+  fr_t r;
+  fr_t rpow;
+  fr_from_uint64(&rpow, 1);
+  fr_from_uint64(&r, (uint64_t)rr);
+  vector<fr_t> g(WIDTH);
+  for (int i = 0; i < WIDTH; ++i) {
+    fr_from_uint64(&g[i], 0);
+  }
+  for (auto& x : X) {
+    auto q = in_domain_q(x.p, x.idx);
+    assert(q.size() == WIDTH);
+    for (int i = 0; i < WIDTH; ++i) {
+      fr_t tmp;
+      fr_mul(&tmp, &rpow, &q[i]);
+      fr_add(&g[i], &g[i], &tmp);
+    }
+    fr_mul(&rpow, &rpow, &r);
+  }
+  g1_t gCommit;
+  ipa_poly_commitment_fr(&gCommit, g);
+
+  // Do the same for h(x) now.
+
+  fr_t tfr;
+  fr_from_uint64(&tfr, tt);
+  // Do the same thing for h, but @ t.
+  vector<fr_t> h(WIDTH);
+  for (int i = 0; i < WIDTH; ++i) {
+    fr_from_uint64(&h[i], 0);
+  }
+  fr_from_uint64(&rpow, 1);
+  fr_from_uint64(&r, (uint64_t)rr);
+  for (auto& x : X) {
+    fr_t denom_inv = tfr;
+    fr_sub(&denom_inv, &denom_inv, ffts_.expanded_roots_of_unity + x.idx);
+    fr_inv(&denom_inv, &denom_inv);
+    for (int i = 0; i < WIDTH; ++i) {
+      fr_t tmp = rpow;
+      fr_mul(&tmp, &tmp, &x.p[i]);
+      fr_mul(&tmp, &tmp, &denom_inv);
+      fr_add(&h[i], &h[i], &tmp);
+    }
+    fr_mul(&rpow, &rpow, &r);
+  }
+  g1_t E;
+  ipa_poly_commitment_fr(&E, h);
+
+  auto h_eval_proof = ipa_eval_and_proof(h, tfr);
+  auto g_eval_proof = ipa_eval_and_proof(g, tfr);
+
+  out.eval = h_eval_proof.first;
+  out.eval2 = g_eval_proof.first;
+
+  out.D = gCommit;
+  out.E = E;
+
+  out.proof = h_eval_proof.second;
+  out.proof2 = g_eval_proof.second;
+
+  return out;
+}
+
 VerkleProof VerkleTree::kzg_gen_multiproof(
     vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes) {
   VerkleProof out;
@@ -282,7 +394,7 @@ VerkleProof VerkleTree::kzg_gen_multiproof(
   for (auto& x : nodes) {
     out.commitments.push_back(x.first->commitment);
   }
-  cout << "Proof size (# of elements) : " << out.commitments.size() << endl;
+  cout << "Proof size KZG (# of elements) : " << out.commitments.size() << endl;
   // Generate a list of <commitment, poly, single_index_to_proof>
   // That is, flatten the `nodes` structure.
   vector<flat_node> X;
@@ -399,8 +511,22 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
   for (auto path_and_req_proof : required_proofs) {
     to_proof.push_back(path_and_req_proof.second);
   }
-  VerkleProof out = kzg_gen_multiproof(to_proof);
+  VerkleProof out;
+  if (use_kzg) {
+    out = kzg_gen_multiproof(to_proof);
+  } else {
+    out = ipa_gen_multiproof(to_proof);
+  }
   return out;
+}
+
+bool VerkleTree::ipa_check_multiproof(const vector<g1_t>& commitments,
+                                      const vector<int>& indices,
+                                      const vector<fr_t>& Y,
+                                      const VerkleProof& proof) {
+  // Do some work.
+  bool verification = true;
+  return verification;
 }
 
 bool VerkleTree::kzg_check_multiproof(const vector<g1_t>& commitments,
@@ -500,6 +626,9 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys,
     Y.push_back(x.p[x.idx]);
   }
 
+  if (!use_kzg) {
+    return ipa_check_multiproof(commitments, indices, Y, proof);
+  }
   return kzg_check_multiproof(commitments, indices, Y, proof);
 }
 
