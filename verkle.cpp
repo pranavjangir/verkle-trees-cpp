@@ -268,6 +268,184 @@ pair<fr_t, g1_t> VerkleTree::eval_and_proof(const vector<fr_t>& p, fr_t pt) {
   free_poly(&ply);
   return make_pair(eval, proof);
 }
+fr_t VerkleTree::eval_poly_evaluation_form(const vector<fr_t>& p, fr_t pt) {
+  fr_t out = fr_zero;
+  fr_t inv_W;
+  fr_t ptpow;
+  fr_from_uint64(&inv_W, WIDTH);
+  fr_inv(&inv_W, &inv_W);
+  assert(p.size() == WIDTH);
+  fr_pow(&ptpow, &pt, WIDTH);
+
+  for (int i = 0; i < WIDTH; ++i) {
+    fr_t num, denom;
+    fr_mul(&num, &p[i], ffts_.expanded_roots_of_unity + i);
+    fr_sub(&denom, &pt, ffts_.expanded_roots_of_unity + i);
+    fr_div(&num, &num, &denom);
+    fr_add(&out, &out, &num);
+  }
+  fr_t tmp;
+  fr_sub(&tmp, &ptpow, &fr_one);
+  fr_mul(&out, &out, &inv_W);
+  fr_mul(&out, &out, &tmp);
+  return out;
+}
+
+fr_t dotp_fr(const vector<fr_t>& A, const vector<fr_t>& B) {
+  assert(A.size() == B.size());  // dot product requires vectors of equal size.
+  fr_t out = fr_zero;
+  for (int i = 0; i < A.size(); ++i) {
+    fr_t tmp;
+    fr_mul(&tmp, &A[i], &B[i]);
+    fr_add(&out, &out, &tmp);
+  }
+  return out;
+}
+
+vector<fr_t> multiply_scalar_fr(const vector<fr_t>& A, const fr_t& B) {
+  vector<fr_t> out(A.size());
+  for (int i = 0; i < A.size(); ++i) {
+    fr_mul(&out[i], &A[i], &B);
+  }
+  return out;
+}
+
+vector<g1_t> multiply_scalar_g1(const vector<g1_t>& A, const fr_t& B) {
+  vector<g1_t> out(A.size());
+  for (int i = 0; i < A.size(); ++i) {
+    g1_mul(&out[i], &A[i], &B);
+  }
+  return out;
+}
+
+vector<fr_t> add_vector_fr(const vector<fr_t>& A, const vector<fr_t>& B) {
+  assert(A.size() == B.size());  // addition requires vectors of equal size.
+  vector<fr_t> out(A.size());
+  for (int i = 0; i < A.size(); ++i) {
+    fr_add(&out[i], &A[i], &B[i]);
+  }
+  return out;
+}
+
+vector<g1_t> add_vector_g1(const vector<g1_t>& A, const vector<g1_t>& B) {
+  assert(A.size() == B.size());  // addition requires vectors of equal size.
+  vector<g1_t> out(A.size());
+  for (int i = 0; i < A.size(); ++i) {
+    g1_add_or_dbl(&out[i], &A[i], &B[i]);
+  }
+  return out;
+}
+
+template <typename T>
+pair<vector<T>, vector<T>> break_in_two(const vector<T>& A) {
+  vector<T> L, R;
+  int sz = A.size();  // should be a power of 2.
+  for (int i = 0; i < sz / 2; ++i) L.push_back(A[i]);
+  for (int i = sz / 2; i < sz; ++i) R.push_back(A[i]);
+  return make_pair(L, R);
+}
+
+pair<fr_t, IPAProof> VerkleTree::ipa_eval_and_proof(const vector<fr_t>& p,
+                                                    fr_t pt, g1_t C) {
+  assert(p.size() ==
+         WIDTH);  // Only support eval and proof for WIDTH size poly for now.
+  fr_t evaluation = eval_poly_evaluation_form(p, pt);
+  pair<fr_t, IPAProof> out;
+  out.first = evaluation;
+
+  // Proof computation.
+
+  int sz = p.size();  // TODO(pranav): Assert that this should be a power of 2.
+
+  // Set the value of Field vectors a and b.
+  // Poly evaluation at `pt` = a dot b.
+  vector<fr_t> a = p;
+  vector<fr_t> b(sz);
+  vector<g1_t> gg(sz);
+  vector<g1_t> hh(sz);
+
+  fr_t inv_W;
+  fr_t ptpow;
+  fr_from_uint64(&inv_W, WIDTH);
+  fr_inv(&inv_W, &inv_W);
+  fr_pow(&ptpow, &pt, WIDTH);
+
+  fr_t k = ptpow;
+  fr_sub(&k, &k, &fr_one);
+  fr_mul(&k, &k, &inv_W);
+
+  for (int i = 0; i < WIDTH; ++i) {
+    b[i] = k;
+    fr_mul(&b[i], &b[i], ffts_.expanded_roots_of_unity + i);
+    fr_t tmp = pt;
+    fr_sub(&tmp, &tmp, ffts_.expanded_roots_of_unity + i);
+    fr_inv(&tmp, &tmp);
+    fr_mul(&b[i], &b[i], &tmp);
+
+    gg[i] = G[i];
+    hh[i] = H[i];
+  }
+  fr_t xx, xxinv;  // TODO(pranav): Make this random.
+  fr_from_uint64(&xx, 42);
+  fr_inv(&xxinv, &xx);
+  vector<pair<g1_t, g1_t>>
+      ans;  // Pair of commitments CL and CR at every level.
+  while (sz > 1) {
+    auto alar = break_in_two<fr_t>(a);
+    auto blbr = break_in_two<fr_t>(b);
+    auto glgr = break_in_two<g1_t>(gg);
+    auto hlhr = break_in_two<g1_t>(hh);
+
+    fr_t zL = dotp_fr(alar.second, blbr.first);
+    fr_t zR = dotp_fr(alar.first, blbr.second);
+
+    g1_t CL = g1_identity;
+    g1_t CR = CL;
+    g1_t tmp;
+    general_pippenger(&CL, glgr.first, alar.second);
+    general_pippenger(&CR, glgr.second, alar.first);
+    general_pippenger(&tmp, hlhr.second, blbr.first);
+    g1_add_or_dbl(&CL, &CL, &tmp);
+    g1_mul(&tmp, &Q, &zL);
+    g1_add_or_dbl(&CL, &CL, &tmp);
+
+    general_pippenger(&tmp, hlhr.first, blbr.second);
+    g1_add_or_dbl(&CR, &CR, &tmp);
+    g1_mul(&tmp, &Q, &zR);
+    g1_add_or_dbl(&CR, &CR, &tmp);
+
+    vector<fr_t> newa = multiply_scalar_fr(alar.second, xx);
+    newa = add_vector_fr(alar.first, newa);
+
+    vector<fr_t> newb = multiply_scalar_fr(blbr.second, xxinv);
+    newb = add_vector_fr(blbr.first, newb);
+
+    a = newa;
+    b = newb;
+
+    vector<g1_t> newg = multiply_scalar_g1(glgr.second, xxinv);
+    newg = add_vector_g1(glgr.first, newg);
+
+    vector<g1_t> newh = multiply_scalar_g1(hlhr.second, xx);
+    newh = add_vector_g1(hlhr.first, newh);
+
+    gg = newg;
+    hh = newh;
+
+    ans.push_back(make_pair(CL, CR));
+    sz /= 2;
+  }
+
+  assert(a.size() == b.size());
+  assert(a.size() == 1);
+
+  // Proof is the list of CL and CR plus the scalar final values of a and b.
+  out.second.a = a[0];
+  out.second.b = b[0];
+  out.second.C = ans;
+
+  return out;
+}
 
 struct flat_node {
   g1_t commitment;
@@ -372,8 +550,8 @@ VerkleProof VerkleTree::ipa_gen_multiproof(
   g1_t E;
   ipa_poly_commitment_fr(&E, h);
 
-  auto h_eval_proof = ipa_eval_and_proof(h, tfr);
-  auto g_eval_proof = ipa_eval_and_proof(g, tfr);
+  auto h_eval_proof = ipa_eval_and_proof(h, tfr, E);
+  auto g_eval_proof = ipa_eval_and_proof(g, tfr, gCommit);
 
   out.eval = h_eval_proof.first;
   out.eval2 = g_eval_proof.first;
@@ -381,8 +559,8 @@ VerkleProof VerkleTree::ipa_gen_multiproof(
   out.D = gCommit;
   out.E = E;
 
-  out.proof = h_eval_proof.second;
-  out.proof2 = g_eval_proof.second;
+  out.ipa_h = h_eval_proof.second;
+  out.ipa_g = g_eval_proof.second;
 
   return out;
 }

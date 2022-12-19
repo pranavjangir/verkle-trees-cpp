@@ -31,6 +31,12 @@ struct VerkleNode {
   uint64_t hash = 0;
 };
 
+struct IPAProof {
+  fr_t a;
+  fr_t b;
+  vector<pair<g1_t, g1_t>> C;
+};
+
 struct VerkleProof {
   vector<g1_t> commitments;
   g1_t D;
@@ -39,6 +45,8 @@ struct VerkleProof {
   g1_t proof2;
   fr_t eval;
   fr_t eval2;
+  IPAProof ipa_h;
+  IPAProof ipa_g;
 };
 
 class VerkleTree {
@@ -117,7 +125,9 @@ class VerkleTree {
   // Wrapper around the c-kzg library for evaluation and proof of
   // a poly at a certain point.
   pair<fr_t, g1_t> eval_and_proof(const vector<fr_t>& p, fr_t pt);
-  pair<fr_t, g1_t> ipa_eval_and_proof(const vector<fr_t>& p, fr_t pt);
+  fr_t eval_poly_evaluation_form(const vector<fr_t>& p, fr_t pt);
+  pair<fr_t, IPAProof> ipa_eval_and_proof(const vector<fr_t>& p, fr_t pt,
+                                          g1_t C);
 
  private:
   shared_ptr<VerkleNode> root_;
