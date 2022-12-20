@@ -698,12 +698,66 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
   return out;
 }
 
+bool VerkleTree::ipa_verify(const g1_t C, const IPAProof& proof) {
+  g1_t Cnew = C;
+  vector<g1_t> gg(WIDTH);
+  vector<g1_t> hh(WIDTH);
+  int sz = WIDTH;
+  // `Cptr` is used to iterate over the CL and CR commitments sent by the
+  // prover.
+  int Cptr = 0;
+
+  fr_t xx, xxinv;  // TODO(pranav): Make this random.
+  fr_from_uint64(&xx, 42);
+  fr_inv(&xxinv, &xx);
+
+  while (sz > 1) {
+    g1_t CL = proof.C[Cptr].first;
+    g1_t CR = proof.C[Cptr].second;
+    g1_t tmp;
+    g1_mul(&tmp, &CL, &xx);
+    g1_add_or_dbl(&Cnew, &Cnew, &tmp);
+    g1_mul(&tmp, &CR, &xxinv);
+    g1_add_or_dbl(&Cnew, &Cnew, &tmp);
+
+    auto glgr = break_in_two(gg);
+    auto hlhr = break_in_two(hh);
+    vector<g1_t> newg = multiply_scalar_g1(glgr.second, xxinv);
+    newg = add_vector_g1(glgr.first, newg);
+
+    vector<g1_t> newh = multiply_scalar_g1(hlhr.second, xx);
+    newh = add_vector_g1(hlhr.first, newh);
+
+    gg = newg;
+    hh = newh;
+
+    sz /= 2;
+    Cptr++;
+  }
+  assert(Cptr == proof.C.size());
+  assert(gg.size() == 1);
+  assert(hh.size() == 1);
+
+  g1_t computed_commitment = Q;
+  fr_t tmp;
+  g1_t gtmp;
+  fr_mul(&tmp, &proof.a, &proof.b);
+  g1_mul(&computed_commitment, &computed_commitment, &tmp);
+  g1_mul(&gtmp, &hh[0], &proof.b);
+  g1_add_or_dbl(&computed_commitment, &computed_commitment, &gtmp);
+  g1_mul(&gtmp, &gg[0], &proof.a);
+  g1_add_or_dbl(&computed_commitment, &computed_commitment, &gtmp);
+
+  return g1_equal(&Cnew, &computed_commitment);
+}
+
 bool VerkleTree::ipa_check_multiproof(const vector<g1_t>& commitments,
                                       const vector<int>& indices,
                                       const vector<fr_t>& Y,
                                       const VerkleProof& proof) {
-  // Do some work.
   bool verification = true;
+  verification &= ipa_verify(proof.D, proof.ipa_g);
+  verification &= ipa_verify(proof.E, proof.ipa_h);
   return verification;
 }
 

@@ -128,6 +128,7 @@ class VerkleTree {
   fr_t eval_poly_evaluation_form(const vector<fr_t>& p, fr_t pt);
   pair<fr_t, IPAProof> ipa_eval_and_proof(const vector<fr_t>& p, fr_t pt,
                                           g1_t C);
+  bool ipa_verify(const g1_t C, const IPAProof& proof);
 
  private:
   shared_ptr<VerkleNode> root_;
