@@ -1,0 +1,1 @@
+g++ simulator.cpp verkle.cpp libblst.a libckzg.a -o name

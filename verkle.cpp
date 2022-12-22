@@ -507,7 +507,8 @@ VerkleProof VerkleTree::ipa_gen_multiproof(
   for (auto& x : nodes) {
     out.commitments.push_back(x.first->commitment);
   }
-  cout << "Proof size IPA (# of elements) : " << out.commitments.size() << endl;
+  cout << "Proof size IPA (# of elements) : " << out.commitments.size()
+       << " bytes : " << out.commitments.size() * 48 << endl;
   // Generate a list of <commitment, poly, single_index_to_proof>
   // That is, flatten the `nodes` structure.
   vector<flat_node> X;
@@ -599,7 +600,8 @@ VerkleProof VerkleTree::kzg_gen_multiproof(
   for (auto& x : nodes) {
     out.commitments.push_back(x.first->commitment);
   }
-  cout << "Proof size KZG (# of elements) : " << out.commitments.size() << endl;
+  cout << "Proof size KZG (# of elements) : " << out.commitments.size()
+       << " bytes : " << out.commitments.size() * 48 << endl;
   // Generate a list of <commitment, poly, single_index_to_proof>
   // That is, flatten the `nodes` structure.
   vector<flat_node> X;
@@ -705,8 +707,8 @@ VerkleProof VerkleTree::merkle_gen_multiproof(
     vector<uint64_t> hashes;
     auto node = node_index.first;
     for (int i = 0; i < WIDTH; ++i) {
-      if (node_index.second.find(i) == node_index.second.end() && 
-      node->childs.find(i) != node->childs.end()) {
+      if (node_index.second.find(i) == node_index.second.end() &&
+          node->childs.find(i) != node->childs.end()) {
         hashes.push_back(node->childs[i]->hash);
       }
     }
@@ -714,7 +716,8 @@ VerkleProof VerkleTree::merkle_gen_multiproof(
     proof_size += hashes.size();
   }
   out.node_and_hashes = node_and_hashes;
-  cout << "Total merkle proof size for width : " << WIDTH << " is : " << proof_size << endl;
+  cout << "Total merkle proof size for width : " << WIDTH
+       << " is : " << proof_size << " bytes : " << proof_size * 32 << endl;
   return out;
 }
 
@@ -749,10 +752,10 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
     out = merkle_gen_multiproof(to_proof);
   }
   auto proof_end = std::chrono::high_resolution_clock::now();
-  auto time_proof =
-      std::chrono::duration_cast<std::chrono::seconds>(proof_end - proof_start);
-  cout << "Time to ACTUALLY generate proof for all keys : " << time_proof.count()
-       << " seconds." << endl;
+  auto time_proof = std::chrono::duration_cast<std::chrono::microseconds>(
+      proof_end - proof_start);
+  cout << "Time to ACTUALLY generate proof for all keys : "
+       << time_proof.count() << " [us]" << endl;
   return out;
 }
 
@@ -764,6 +767,9 @@ bool VerkleTree::ipa_verify(const g1_t C, const IPAProof& proof) {
   // `Cptr` is used to iterate over the CL and CR commitments sent by the
   // prover.
   int Cptr = 0;
+
+  cout << "IPA proof size (group elements): " << proof.C.size() * 2
+       << " bytes : " << proof.C.size() * 2 * 48 << endl;
 
   fr_t xx, xxinv;  // TODO(pranav): Make this random.
   fr_from_uint64(&xx, 42);
@@ -883,11 +889,12 @@ bool VerkleTree::merkle_check_multiproof(
     if (computed_hash != hash_to_verify) ok = false;
   }
   auto verification_end = std::chrono::high_resolution_clock::now();
-  auto time_verification = std::chrono::duration_cast<std::chrono::seconds>(
-      verification_end - verification_start);
+  auto time_verification =
+      std::chrono::duration_cast<std::chrono::microseconds>(verification_end -
+                                                            verification_start);
 
-  cout << "Time to ACTUALLY merkle verify proof for all keys : " << time_verification.count()
-       << " seconds." << endl;
+  cout << "Time to ACTUALLY merkle verify proof for all keys : "
+       << time_verification.count() << " [us]" << endl;
   return ok;
 }
 
@@ -951,15 +958,16 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys,
   bool out = true;
   auto verification_start = std::chrono::high_resolution_clock::now();
   if (vctype_ == IPA) {
-    out =  ipa_check_multiproof(commitments, indices, Y, proof);
+    out = ipa_check_multiproof(commitments, indices, Y, proof);
   } else if (vctype_ == KZG) {
-    out =  kzg_check_multiproof(commitments, indices, Y, proof);
+    out = kzg_check_multiproof(commitments, indices, Y, proof);
   }
   auto verification_end = std::chrono::high_resolution_clock::now();
-  auto time_verification = std::chrono::duration_cast<std::chrono::seconds>(
-      verification_end - verification_start);
+  auto time_verification =
+      std::chrono::duration_cast<std::chrono::microseconds>(verification_end -
+                                                            verification_start);
 
-  cout << "Time to ACTUALLY verify proof for all keys : " << time_verification.count()
-       << " seconds." << endl;
+  cout << "Time to ACTUALLY verify proof for all keys : "
+       << time_verification.count() << " [us]" << endl;
   return out;
 }
