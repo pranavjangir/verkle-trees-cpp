@@ -11,10 +11,17 @@ using namespace std;
 
 // TODO(pranav): Make this tunable from CLI.
 // This means that each verkle tree node will have 2^WIDTH_BITS = 16 children.
-constexpr int WIDTH_BITS = 8;
+constexpr int WIDTH_BITS = 4;
 constexpr int KEYSIZE = 265;  // Fixed keysize of 256 bits.
 constexpr int WIDTH = (1 << WIDTH_BITS);
 constexpr bool use_kzg = true;  // If false, we use IPA type vector commitment.
+
+enum VCType {
+  KZG = 0,
+  IPA = 1,
+  PMERKLE = 2,  // Patricia Merkle Trees (Needs WIDTH_BITS = 4)
+  BMERKLE = 3   // Binary Merkle Trees (Needs WIDTH_BITS = 1)
+};
 
 static const scalar_t secret = {0xa4, 0x73, 0x31, 0x95, 0x28, 0xc8, 0xb6, 0xea,
                                 0x4d, 0x08, 0xcc, 0x53, 0x18, 0x00, 0x00, 0x00,
@@ -47,17 +54,24 @@ struct VerkleProof {
   fr_t eval2;
   IPAProof ipa_h;
   IPAProof ipa_g;
+
+  // Useful only for merkle trees
+  vector<pair<shared_ptr<VerkleNode>, vector<uint64_t>>> node_and_hashes;
 };
 
 class VerkleTree {
  public:
-  VerkleTree() {
+  VerkleTree(VCType vctype) {
     // special type = root.
     root_ = make_shared<VerkleNode>();
     root_->is_leaf = false;
     // random commitment for now.
     root_->commitment = g1_generator;
     root_->childs.clear();
+    vctype_ = vctype;
+    is_merkle_ = false;
+    // is a patricia merkle tree or binary merkle tree.
+    is_merkle_ = (vctype_ == BMERKLE || vctype_ == PMERKLE);
 
     fr_t s_pow, s;
     fr_from_scalar(&s, &secret);
@@ -111,6 +125,8 @@ class VerkleTree {
                                const VerkleProof& proof);
   VerkleProof kzg_gen_multiproof(
       vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes);
+  VerkleProof merkle_gen_multiproof(
+      vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes);
   VerkleProof ipa_gen_multiproof(
       vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes);
   bool kzg_check_multiproof(const vector<g1_t>& commitments,
@@ -119,6 +135,10 @@ class VerkleTree {
   bool ipa_check_multiproof(const vector<g1_t>& commitments,
                             const vector<int>& indices, const vector<fr_t>& Y,
                             const VerkleProof& proof);
+  bool merkle_check_multiproof(
+      const vector<string>& keys,
+      const vector<pair<shared_ptr<VerkleNode>, set<int>>> to_proof,
+      const VerkleProof& proof);
   // Computes (f(x) - f(idx)) / (x - w^idx)
   // Where f(x) is the poly corresponding to `in`.
   vector<fr_t> in_domain_q(const vector<fr_t>& in, int idx);
@@ -132,6 +152,8 @@ class VerkleTree {
 
  private:
   shared_ptr<VerkleNode> root_;
+  VCType vctype_;
+  bool is_merkle_ = false;
   // KZG specific setup.
   FFTSettings ffts_;
   KZGSettings kzgs_;

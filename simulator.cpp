@@ -55,7 +55,7 @@ int main() {
 
   cout << "Start tree operations now!" << endl;
   auto insert_start = std::chrono::high_resolution_clock::now();
-  VerkleTree vt;
+  VerkleTree vt(PMERKLE);
   for (const auto& block : map) {
     for (const auto& key : block.second) {
       vt.plain_insert_verkle_node(key, "pranav");

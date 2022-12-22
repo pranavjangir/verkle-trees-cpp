@@ -9,20 +9,42 @@ using namespace std;
 
 using json = nlohmann::json;
 
-// Fiat shamir heuristic random values.
-// TODO(pranav): These should ideally be calculated
-// using a suitable hash function.
-// For benchmarking purposes, we are keeping them constants.
+// Fiat shamir heuristic random value seeds.
 int rr = 22;
 int tt = 42;
 
 std::vector<int> VerkleTree::get_key_path(const std::string& key) {
   // Bits must be multiple of 4.
-  assert(WIDTH_BITS % 4 == 0);
+  if (vctype_ != BMERKLE) {
+    if (vctype_ == PMERKLE) {
+      assert(WIDTH_BITS == 4);
+    } else {
+      assert(WIDTH_BITS % 4 == 0);
+    }
+  } else {
+    assert(WIDTH_BITS == 1);
+  }
   std::vector<int> out;
   std::string stripped = key;
   if (key.length() == 64 + 2) {  // key = 0x34fd....
     stripped = key.substr(2);
+  }
+  if (vctype_ == BMERKLE) {
+    // binary conversion.
+    for (int i = stripped.length() - 1; i >= 0; i--) {
+      int val = -1;
+      if (stripped[i] >= '0' && stripped[i] <= '9') {
+        val = (stripped[i] - '0');
+      } else if (stripped[i] >= 'a' && stripped[i] <= 'f') {
+        val = 10 + (stripped[i] - 'a');
+      }
+      assert(val >= 0 && val <= 15);
+      for (int j = 0; j < 4; ++j) {
+        out.push_back(val % 2);
+        val /= 2;
+      }
+    }
+    return out;
   }
   for (int i = 0; i < stripped.length(); i += (WIDTH_BITS / 4)) {
     int pw = 1;
@@ -33,9 +55,6 @@ std::vector<int> VerkleTree::get_key_path(const std::string& key) {
         val = (stripped[j] - '0');
       } else if (stripped[j] >= 'a' && stripped[j] <= 'f') {
         val = 10 + (stripped[j] - 'a');
-      }
-      if (val < 0 || val > 15) {
-        cout << stripped[j] << " ---- " << val << endl;
       }
       assert(val >= 0 && val <= 15);
       idx += pw * val;
@@ -178,12 +197,20 @@ void VerkleTree::dfs_commitment(shared_ptr<VerkleNode>& x) {
       child_hashes[i] = x->childs[i]->hash;
     }
   }
-  if (use_kzg) {
+  if (vctype_ == KZG) {
     poly_commitment(&x->commitment, child_hashes);
-  } else {
+    x->hash = hash_commitment(&x->commitment);
+    return;
+  } else if (vctype_ == IPA) {
     ipa_poly_commitment(&x->commitment, child_hashes);
+    x->hash = hash_commitment(&x->commitment);
+    return;
   }
-  x->hash = hash_commitment(&x->commitment);
+  assert(is_merkle_);
+  auto uint_hasher = std::hash<uint64_t>();
+  for (auto& hash : child_hashes) {
+    x->hash ^= uint_hasher(hash);
+  }
   // cerr << "internal hash : " << x->hash << endl;
 }
 
@@ -668,6 +695,29 @@ VerkleProof VerkleTree::kzg_gen_multiproof(
   return out;
 }
 
+VerkleProof VerkleTree::merkle_gen_multiproof(
+    vector<pair<shared_ptr<VerkleNode>, set<int>>> nodes) {
+  cout << "Generating proofs for merkle tree with width : " << WIDTH << endl;
+  VerkleProof out;
+  vector<pair<shared_ptr<VerkleNode>, vector<uint64_t>>> node_and_hashes;
+  int proof_size = 0;
+  for (auto& node_index : nodes) {
+    vector<uint64_t> hashes;
+    auto node = node_index.first;
+    for (int i = 0; i < WIDTH; ++i) {
+      if (node_index.second.find(i) == node_index.second.end() && 
+      node->childs.find(i) != node->childs.end()) {
+        hashes.push_back(node->childs[i]->hash);
+      }
+    }
+    node_and_hashes.push_back(make_pair(std::move(node), hashes));
+    proof_size += hashes.size();
+  }
+  out.node_and_hashes = node_and_hashes;
+  cout << "Total merkle proof size for width : " << WIDTH << " is : " << proof_size << endl;
+  return out;
+}
+
 VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
   map<vector<int>, pair<shared_ptr<VerkleNode>, set<int>>> required_proofs;
   for (auto& key : keys) {
@@ -690,11 +740,19 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
     to_proof.push_back(path_and_req_proof.second);
   }
   VerkleProof out;
-  if (use_kzg) {
+  auto proof_start = std::chrono::high_resolution_clock::now();
+  if (vctype_ == KZG) {
     out = kzg_gen_multiproof(to_proof);
-  } else {
+  } else if (vctype_ == IPA) {
     out = ipa_gen_multiproof(to_proof);
+  } else {
+    out = merkle_gen_multiproof(to_proof);
   }
+  auto proof_end = std::chrono::high_resolution_clock::now();
+  auto time_proof =
+      std::chrono::duration_cast<std::chrono::seconds>(proof_end - proof_start);
+  cout << "Time to ACTUALLY generate proof for all keys : " << time_proof.count()
+       << " seconds." << endl;
   return out;
 }
 
@@ -805,6 +863,34 @@ bool VerkleTree::kzg_check_multiproof(const vector<g1_t>& commitments,
   return verification;
 }
 
+bool VerkleTree::merkle_check_multiproof(
+    const vector<string>& keys,
+    const vector<pair<shared_ptr<VerkleNode>, set<int>>> to_proof,
+    const VerkleProof& proof) {
+  cout << "Checking merkle multiproofs for width : " << WIDTH << endl;
+  auto verification_start = std::chrono::high_resolution_clock::now();
+  bool ok = true;
+  auto& nodes_and_hashes = proof.node_and_hashes;
+  auto hasher = std::hash<uint64_t>();
+  for (auto& nh : nodes_and_hashes) {
+    auto node = nh.first;
+    uint64_t hash_to_verify = node->hash;
+    uint64_t computed_hash = 0;
+    for (int i = 0; i < WIDTH; ++i) {
+      if (node->childs.find(i) == node->childs.end()) continue;
+      computed_hash ^= hasher(node->childs[i]->hash);
+    }
+    if (computed_hash != hash_to_verify) ok = false;
+  }
+  auto verification_end = std::chrono::high_resolution_clock::now();
+  auto time_verification = std::chrono::duration_cast<std::chrono::seconds>(
+      verification_end - verification_start);
+
+  cout << "Time to ACTUALLY merkle verify proof for all keys : " << time_verification.count()
+       << " seconds." << endl;
+  return ok;
+}
+
 bool VerkleTree::check_verkle_multiproof(const vector<string>& keys,
                                          const VerkleProof& proof) {
   map<vector<int>, pair<shared_ptr<VerkleNode>, set<int>>> required_proofs;
@@ -827,6 +913,11 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys,
   vector<pair<shared_ptr<VerkleNode>, set<int>>> to_proof;
   for (auto path_and_req_proof : required_proofs) {
     to_proof.push_back(path_and_req_proof.second);
+  }
+
+  // If the tree is merkle tree, then no need to flatten.
+  if (is_merkle_) {
+    return merkle_check_multiproof(keys, to_proof, proof);
   }
 
   vector<flat_node> X;
@@ -857,9 +948,18 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys,
     indices.push_back(x.idx);
     Y.push_back(x.p[x.idx]);
   }
-
-  if (!use_kzg) {
-    return ipa_check_multiproof(commitments, indices, Y, proof);
+  bool out = true;
+  auto verification_start = std::chrono::high_resolution_clock::now();
+  if (vctype_ == IPA) {
+    out =  ipa_check_multiproof(commitments, indices, Y, proof);
+  } else if (vctype_ == KZG) {
+    out =  kzg_check_multiproof(commitments, indices, Y, proof);
   }
-  return kzg_check_multiproof(commitments, indices, Y, proof);
+  auto verification_end = std::chrono::high_resolution_clock::now();
+  auto time_verification = std::chrono::duration_cast<std::chrono::seconds>(
+      verification_end - verification_start);
+
+  cout << "Time to ACTUALLY verify proof for all keys : " << time_verification.count()
+       << " seconds." << endl;
+  return out;
 }
