@@ -12,8 +12,8 @@ We also compare two vector commitment schemes KZG and IPA in our Verkle Trees. F
 <img src="imgs/ver_proof_time.png">
 
 ## Authors
-- Pranav Jangir []
-- Animesh Ramesh []
+- Pranav Jangir [pj2251@nyu.edu]
+- Animesh Ramesh [ar8006@nyu.edu]
 - Arun Patro [akp7833@nyu.edu]
 
 [![forthebadge](https://forthebadge.com/images/badges/works-on-my-machine.svg)](https://forthebadge.com)
