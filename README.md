@@ -6,6 +6,11 @@ We implement Verkle, Patricia-Merkle, and Binary-Merkle in C++. We compare the p
 
 We also compare two vector commitment schemes KZG and IPA in our Verkle Trees. For each of them, we compare multiple width versions of them. 
 
+## Results
+<img src="imgs/proof_size.png">
+<img src="imgs/gen_proof_time.png">
+<img src="imgs/ver_proof_time.png">
+
 ## Authors
 - Pranav Jangir []
 - Animesh Ramesh []
