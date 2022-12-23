@@ -31,6 +31,7 @@ Verkle tree implementation in C++.
 ```
 g++ simulator.cpp verkle.cpp libblst.a libckzg.a -o name
 ```
+Since we cannot upload large json files on github, the link to download the json file containing block data can be downloaded from [here](https://drive.google.com/drive/folders/1QuivElecFnorXpFB4PYHSCOElmRCjrzu?usp=share_link).
 
 ## File Descriptions
 
