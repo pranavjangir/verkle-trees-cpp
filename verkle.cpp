@@ -754,7 +754,7 @@ VerkleProof VerkleTree::get_verkle_multiproof(const vector<string>& keys) {
   auto proof_end = std::chrono::high_resolution_clock::now();
   auto time_proof = std::chrono::duration_cast<std::chrono::microseconds>(
       proof_end - proof_start);
-  cout << "Time to ACTUALLY generate proof for all keys : "
+  cout << "Time to generate proof for all keys : "
        << time_proof.count() << " [us]" << endl;
   return out;
 }
@@ -864,8 +864,18 @@ bool VerkleTree::kzg_check_multiproof(const vector<g1_t>& commitments,
 
   // Final verification using a single pairing call.
   bool verification = false;
+  auto pairing_start = std::chrono::high_resolution_clock::now();
   check_proof_single(&verification, &proof.commitments[0], &proof.proof, &t,
                      &val_to_prove, &kzgs_);
+  auto pairing_end = std::chrono::high_resolution_clock::now();
+
+  auto time_pairing =
+      std::chrono::duration_cast<std::chrono::microseconds>(pairing_end -
+                                                            pairing_start);
+
+  cout << "Time to do just elliptic curve pairing : "
+       << time_pairing.count() << " [us]" << endl;
+
   return verification;
 }
 
@@ -893,7 +903,7 @@ bool VerkleTree::merkle_check_multiproof(
       std::chrono::duration_cast<std::chrono::microseconds>(verification_end -
                                                             verification_start);
 
-  cout << "Time to ACTUALLY merkle verify proof for all keys : "
+  cout << "Time to merkle verify proof for all keys : "
        << time_verification.count() << " [us]" << endl;
   return ok;
 }
@@ -967,7 +977,7 @@ bool VerkleTree::check_verkle_multiproof(const vector<string>& keys,
       std::chrono::duration_cast<std::chrono::microseconds>(verification_end -
                                                             verification_start);
 
-  cout << "Time to ACTUALLY verify proof for all keys : "
+  cout << "Time to verify proof for all keys : "
        << time_verification.count() << " [us]" << endl;
   return out;
 }

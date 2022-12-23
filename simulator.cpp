@@ -48,26 +48,11 @@ std::unordered_map<std::string, std::vector<std::string>> read_block_file(
   return map;
 }
 
-int main() {
-  auto map = read_block_file("ParserCode/data2000-1.json");
-
+void run_n_blocks(int n, VerkleTree& vt,
+std::unordered_map<std::string, std::vector<std::string>>& map) {
   cout << "Start tree operations now!" << endl;
-  auto insert_start = std::chrono::high_resolution_clock::now();
-  VerkleTree vt(BMERKLE);
-  for (const auto& block : map) {
-    for (const auto& key : block.second) {
-      vt.plain_insert_verkle_node(key, "pranav");
-    }
-  }
-  vt.compute_commitments();
-  auto insert_end = std::chrono::high_resolution_clock::now();
-  auto time_insert = std::chrono::duration_cast<std::chrono::seconds>(
-      insert_end - insert_start);
-  cout << "Time to insert all keys : " << time_insert.count() << " seconds."
-       << endl;
-
   vector<string> keys_for_proof;
-  int num_blocks = 1;
+  int num_blocks = n;
   for (const auto& block : map) {
     if (num_blocks == 0) break;
     for (const auto& key : block.second) {
@@ -82,18 +67,35 @@ int main() {
   auto proof_end = std::chrono::high_resolution_clock::now();
   auto time_proof =
       std::chrono::duration_cast<std::chrono::seconds>(proof_end - proof_start);
-  //   cout << "Time to generate proof for all keys : " << time_proof.count()
-  //        << " seconds." << endl;
 
   auto verification_start = std::chrono::high_resolution_clock::now();
   bool success = vt.check_verkle_multiproof(keys_for_proof, proof);
   auto verification_end = std::chrono::high_resolution_clock::now();
   auto time_verification = std::chrono::duration_cast<std::chrono::seconds>(
       verification_end - verification_start);
+}
 
-  //   cout << "Time to verify proof for all keys : " <<
-  //   time_verification.count()
-  //        << " seconds." << endl;
-  cout << "SUCCESS? :::: " << success << endl;
+int main() {
+  auto map = read_block_file("ParserCode/data2000-1.json");
+
+  auto insert_start = std::chrono::high_resolution_clock::now();
+  VerkleTree vt(KZG);
+  for (const auto& block : map) {
+    for (const auto& key : block.second) {
+      vt.plain_insert_verkle_node(key, "pranav");
+    }
+  }
+  vt.compute_commitments();
+  auto insert_end = std::chrono::high_resolution_clock::now();
+  auto time_insert = std::chrono::duration_cast<std::chrono::seconds>(
+      insert_end - insert_start);
+  cout << "Time to insert all keys : " << time_insert.count() << " seconds."
+       << endl;
+
+  for (int i = 1 ; i <= 12; ++i) {
+    cout << "Running for last " << i << " blocks | " << "Width_bits = " << WIDTH_BITS << endl;
+    run_n_blocks(i, vt, map);
+    cout << "____________________________________________________________\n";
+  }
   return 0;
 }
