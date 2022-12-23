@@ -1,5 +1,5 @@
 // import level from 'level' 
-import { SecureTrie as Trie } from 'merkle-patricia-tree'
+import { BaseTrie as Trie } from 'merkle-patricia-tree'
 import fs from "fs";
 import assert from 'node:assert/strict';
 
@@ -12,7 +12,7 @@ const trie = new Trie()
 
 // async function test() {
 //   await trie.put(Buffer.from('test'), Buffer.from('one'))
-//   const value = await trie.get(Buffer.from('test'))
+//   const value = await trie.get(Buffer.from('test')
 //   console.log(value.toString()) // 'one'
 // }
 
@@ -33,23 +33,24 @@ const trie = new Trie()
 // test()
 // test2()
 
-async function insert() {
+function insert() {
   for (var blockNumber in data) {
     // if (blockNumber == "f6edc6") {
-    //   break
+      // break
     // }
     for (var idx in data[blockNumber]) {
       // if (idx == 20) {
-      //   break
+        // break
       // }
       var address = data[blockNumber][idx]
       var randValue = parseInt(Math.random() * 1000).toString();
-      console.log("[state-change item]", blockNumber, idx, address, randValue)
+      // console.log("[state-change item]", blockNumber, idx, address, randValue)
 
       // insert into trie
-      await trie.put(Buffer.from(address), Buffer.from(randValue))
+      trie.put(Buffer.from(address), Buffer.from(randValue))
     }
   }
+
 }
 
 async function insertAndFetch() {
@@ -108,6 +109,7 @@ async function fetchAndProve() {
 console.time('test');
 await insert()
 // await insertAndFetch()
-await fetchAndProve()
+// await fetchAndProve()
 // console.log("Trie now at ", JSON.stringify(trie).length);
+// console.log(Buffer.from("123abcdXYZW"))
 console.timeEnd('test');
