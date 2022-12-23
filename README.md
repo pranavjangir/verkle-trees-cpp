@@ -22,9 +22,9 @@ Verkle tree implementation in C++.
 
 ## Dependencies
 
-[blst library](https://github.com/supranational/blst) - For elliptic curve operations. (Static library included : libblst.a)
-[c-kzg library](https://github.com/benjaminion/c-kzg) - Uses blst library, defines useful utility functions like pippenger linear combination, FFT, field arithmetic etc. (Static library included : libckzg.a)
-[GNU MP library](https://gmplib.org) - For big integer support in C/C++.
+- [blst library](https://github.com/supranational/blst) - For elliptic curve operations. (Static library included : libblst.a)
+- [c-kzg library](https://github.com/benjaminion/c-kzg) - Uses blst library, defines useful utility functions like pippenger linear combination, FFT, field arithmetic etc. (Static library included : libckzg.a)
+- [GNU MP library](https://gmplib.org) - For big integer support in C/C++.
 
 ## How to build
 
