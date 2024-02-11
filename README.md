@@ -39,3 +39,4 @@ Since we cannot upload large json files on github, the link to download the json
 - `simulator.cpp` - Parses json file containing data scraped from Etherscan API, and runs experiments using `verkle.h`
 - `blst.h` - Defines APIs for curve operations.
 - `c-kzg` - Utility functions.
+  
